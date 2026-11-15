@@ -3,20 +3,20 @@
 About 30 minutes, all free tiers, no commands to type. Keep a note open
 (Notepad is fine) to paste values into as you go.
 
-## 1. Point Vercel at the new code
+## 1. A new Vercel project (the old app stays untouched)
 
-The existing Vercel project (f1-underground.vercel.app) runs the old app.
-Re-using it keeps the same address for everyone.
+1. vercel.com → **Add New… → Project** → **Import** next to
+   **NEW-F1Underground**. (If it isn't listed, click "Adjust GitHub App
+   Permissions" and allow Vercel access to that repository.)
+2. Project name: `new-f1-underground` (that becomes the address
+   https://new-f1-underground.vercel.app; if Vercel says the name is taken,
+   pick another and use that address everywhere below).
+3. Leave everything else as it is and click **Deploy**. The first deploy
+   fails or shows errors until the settings below are in; that's expected.
 
-1. vercel.com → your **f1-underground** project → **Settings → Git**.
-2. **Disconnect** the old repository, then **Connect Git Repository** →
-   GitHub → **NEW-F1Underground**. (If GitHub asks, allow Vercel access to
-   that repository.)
-3. Settings → **Build and Deployment**: Framework Preset should say
-   Next.js. Leave the commands empty (the defaults are right).
-4. Settings → **Environment Variables**: delete the old Supabase variables
-   (anything starting with `SUPABASE` or `NEXT_PUBLIC_SUPABASE`) and the old
-   admin password variable.
+The old app keeps running at f1-underground.vercel.app. When you're ready to
+retire it, the address can be moved to the new project in one step
+(Settings → Domains).
 
 ## 2. Database (Neon, through Vercel)
 
@@ -55,7 +55,7 @@ the app sends from an ordinary Gmail account (500 emails a day, plenty).
    **Publish app** (no Google review is needed for name and email only).
 3. **Credentials → Create credentials → OAuth client ID** → Web
    application. Under **Authorised redirect URIs** add
-   `https://f1-underground.vercel.app/api/auth/callback/google`.
+   `https://new-f1-underground.vercel.app/api/auth/callback/google`.
 4. Copy the **Client ID** and **Client secret** into Vercel as
    `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`.
 
@@ -64,7 +64,7 @@ the app sends from an ordinary Gmail account (500 emails a day, plenty).
 1. Vercel: add `BOOTSTRAP_COMMISSIONER_EMAILS` = your Gmail address.
 2. **Deployments** tab → the latest one → **⋯ → Redeploy**. Wait for
    "Ready" (about 2 minutes).
-3. Open https://f1-underground.vercel.app and sign in with that Gmail
+3. Open https://new-f1-underground.vercel.app and sign in with that Gmail
    address: you're the commissioner. On **Admin**, add the 2026 players as
    profiles and copy the join link.
 
