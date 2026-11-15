@@ -30,7 +30,13 @@ export default async function SignIn({
           Local demo: skip sign-in and pick a demo player →
         </a>
       )}
-      {error && <p className="mt-2 text-sm text-down">Sign-in didn&apos;t work. Try again.</p>}
+      {error === "email" ? (
+        <p className="mt-2 text-sm text-down">
+          We couldn&apos;t send the sign-in email. Use Google for now, and tell a commissioner.
+        </p>
+      ) : error ? (
+        <p className="mt-2 text-sm text-down">Sign-in didn&apos;t work. Try again.</p>
+      ) : null}
 
       <form
         className="mt-4"
@@ -57,7 +63,10 @@ export default async function SignIn({
           try {
             await signIn("nodemailer", { email: String(form.get("email") ?? ""), redirectTo: to, redirect: false });
           } catch (e) {
-            if (e instanceof AuthError) redirect(`/signin?error=1&next=${encodeURIComponent(to)}`);
+            if (e instanceof AuthError) {
+              console.error("email sign-in failed:", e.cause ?? e);
+              redirect(`/signin?error=email&next=${encodeURIComponent(to)}`);
+            }
             throw e;
           }
           redirect("/signin/check-email");

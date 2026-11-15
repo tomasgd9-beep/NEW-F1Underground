@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import type { ActionResult } from "@/components/action-form";
 import * as league from "@/lib/league";
-import { sendInviteEmail } from "@/lib/mail";
+import { sendInviteEmail, sendMail } from "@/lib/mail";
 import { requireViewer } from "@/lib/session";
 
 /** Run a league operation and turn rule errors into a message for the form. */
@@ -50,7 +50,12 @@ export async function inviteByEmail(_: ActionResult, f: FormData): Promise<Actio
   const v = await requireViewer();
   return attempt(async () => {
     const inv = await league.createEmailInvite(getDb(), v.userId, str(f, "email"));
-    await sendInviteEmail(inv.email!, v.player?.displayName ?? "A friend", inv.token);
+    try {
+      await sendInviteEmail(inv.email!, v.player?.displayName ?? "A friend", inv.token);
+    } catch (e) {
+      console.error("invite email failed:", e);
+      throw new league.LeagueError("The invite email couldn't be sent. Share the join link instead.");
+    }
     return `Invite sent to ${inv.email}.`;
   });
 }
@@ -103,4 +108,18 @@ export async function unlink(_: ActionResult, f: FormData): Promise<ActionResult
 export async function resolveClaim(_: ActionResult, f: FormData): Promise<ActionResult> {
   const v = await requireViewer();
   return attempt(() => league.resolveClaim(getDb(), v.userId, num(f, "playerId"), str(f, "approve") === "1"));
+}
+
+/** Commissioner: send a test email to yourself and show the exact error if it fails. */
+export async function testEmail(): Promise<ActionResult> {
+  const v = await requireViewer();
+  if (!v.isCommissioner) return { error: "Only commissioners can do that." };
+  if (!v.email) return { error: "Your account has no email address." };
+  try {
+    await sendMail(v.email, "F1 Underground test email", "If you can read this, league emails work.");
+    return { ok: `Sent to ${v.email}. Check your inbox (and spam).` };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { error: `Sending failed: ${msg}` };
+  }
 }

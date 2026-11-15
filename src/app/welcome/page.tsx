@@ -28,10 +28,13 @@ export default async function Welcome() {
         </>
       ) : (
         <>
-          <h1 className="text-lg font-bold">You&apos;re not in the league yet</h1>
+          <h1 className="text-lg font-bold">Welcome!</h1>
           <p className="text-sm text-muted">
-            Ask any member for the join link (it&apos;s usually in the group chat), or for an email invite to{" "}
-            <b className="text-ink">{v.email}</b>.
+            You&apos;re signed in as <b className="text-ink">{v.email}</b>, but this account isn&apos;t in the league
+            yet.
+          </p>
+          <p className="mt-2 text-sm text-muted">
+            To join, open the invite link a league member sent you. No link? Ask in the group chat.
           </p>
         </>
       )}
@@ -42,7 +45,7 @@ export default async function Welcome() {
           await signOut({ redirectTo: "/signin" });
         }}
       >
-        <button className="text-sm text-muted underline">Sign out</button>
+        <button className="text-sm text-muted underline">Wrong account? Sign out</button>
       </form>
     </PlainShell>
   );

@@ -184,6 +184,15 @@ export default async function Admin() {
           )}
         </Card>
 
+        {boss && (
+          <Card title="Email check">
+            <ActionForm action={act.testEmail} className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted">Sends a test email to {v.email}.</span>
+              <SubmitButton variant="quiet">Send me a test email</SubmitButton>
+            </ActionForm>
+          </Card>
+        )}
+
         <Card title="Race control" note="phase 3">
           <p className="text-sm text-muted">
             Pull scores, lock teams, move to the next race and emergency sync arrive with the scheduled job.
