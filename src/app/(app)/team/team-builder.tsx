@@ -320,7 +320,8 @@ export function TeamBuilder({
                 <th className="py-1 pl-3 text-left font-semibold">{tab === "driver" ? "Driver" : "Constructor"}</th>
                 <th className="px-2 text-right font-semibold">Season</th>
                 <th className="px-2 text-right font-semibold">Last 3</th>
-                <th className="pr-3 text-right font-semibold">Price</th>
+                <th className="pr-2 text-right font-semibold">Price</th>
+                <th className="w-10 pr-2" aria-label="Add or remove" />
               </tr>
             </thead>
             {tab === "driver" ? (
@@ -360,7 +361,7 @@ function Group({
     <tbody>
       {title && (
         <tr>
-          <th colSpan={4} className="bg-bg px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <th colSpan={5} className="bg-bg px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wide text-muted">
             {title}
           </th>
         </tr>
@@ -376,7 +377,6 @@ function Group({
             <td className="py-1.5 pl-3">
               <div className="flex items-center gap-2">
                 <span className="h-6 w-1 shrink-0 rounded" style={{ background: a.colour }} />
-                <span className="w-4 text-center text-red">{picked ? "✓" : ""}</span>
                 <span className="min-w-0">
                   <b>{a.ticker}</b>
                   <span className="hidden text-muted sm:inline">
@@ -393,7 +393,7 @@ function Group({
             <td className={`px-2 text-right ${a.last3 < 0 ? "text-down" : ""}`}>
               {pts(a.last3)}
             </td>
-            <td className="pr-3 text-right whitespace-nowrap">
+            <td className="pr-2 text-right whitespace-nowrap">
               {fmt(a.price)}
               {a.move != null && a.move !== 0 && (
                 <span className={`ml-1 hidden text-[11px] min-[360px]:inline ${a.move > 0 ? "text-up" : "text-down"}`}>
@@ -401,6 +401,21 @@ function Group({
                   {Math.abs(a.move).toFixed(2)}
                 </span>
               )}
+            </td>
+            <td className="py-1 pr-2">
+              <button
+                type="button"
+                aria-label={picked ? `Remove ${a.ticker}` : `Add ${a.ticker}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTap(a);
+                }}
+                className={`grid h-8 w-8 place-items-center rounded text-lg font-bold leading-none text-white ${
+                  picked ? "bg-muted" : "bg-navy dark:bg-white/20"
+                }`}
+              >
+                {picked ? "−" : "+"}
+              </button>
             </td>
           </tr>
         );
