@@ -23,7 +23,10 @@ export function getDb(): Db {
       const { PGlite } = require("@electric-sql/pglite");
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { drizzle: drizzlePglite } = require("drizzle-orm/pglite");
-      _db = drizzlePglite(new PGlite(url.slice("pglite:".length)), { schema }) as Db;
+      // One PGlite per process: Next's dev server may load this module more than once.
+      const g = globalThis as unknown as { __pglite?: unknown };
+      g.__pglite ??= new PGlite(url.slice("pglite:".length));
+      _db = drizzlePglite(g.__pglite, { schema }) as Db;
     } else {
       _db = drizzle(neon(url), { schema }) as unknown as Db;
     }

@@ -9,10 +9,11 @@ emailed link) · a scheduled GitHub Actions job (from phase 3).
 
 ## Phases
 
-1. **Foundation** ← done: schema for the whole data model, sign-in, join
+1. **Foundation** (done): schema for the whole data model, sign-in, join
    link and email invites, claiming a 2026 profile, commissioner role,
    Admin → Players / Invites / Activity.
-2. My team: team builder, saved picks, server-side deadline, penalty.
+2. **My team** (done): team builder with saved picks, deadline enforced on
+   the server, live over-budget penalty, Season / Last 3 / price moves.
 3. Scheduled job + Points page.
 4. League + Admin race control.
 5. History import, Archive page, replay test against the sheet.
