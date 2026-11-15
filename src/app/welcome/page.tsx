@@ -1,15 +1,18 @@
 import { redirect } from "next/navigation";
 import { signOut } from "@/auth";
 import { PlainShell } from "@/components/plain-shell";
+import { CodeForm } from "@/components/code-form";
 import { requireViewer, viewerPendingClaim } from "@/lib/session";
+import { withdrawClaim } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
-/** Signed in, but not (yet) a league member. */
+/** Signed in, not in a league yet: join one with a code. */
 export default async function Welcome() {
   const v = await requireViewer();
   if (v.player?.active) redirect("/team");
   const claim = await viewerPendingClaim(v.userId);
+  const first = v.name?.split(" ")[0];
 
   return (
     <PlainShell>
@@ -22,30 +25,33 @@ export default async function Welcome() {
         <>
           <h1 className="text-lg font-bold">Almost there</h1>
           <p className="text-sm text-muted">
-            You asked to be linked to <b className="text-ink">{claim.displayName}</b>. A commissioner needs to confirm
-            it; refresh this page once they have.
+            You asked to join as <b className="text-ink">{claim.displayName}</b>. A commissioner needs to confirm
+            it&apos;s you; this page opens the league once they have.
           </p>
+          <form action={withdrawClaim} className="mt-3">
+            <button className="text-sm text-muted underline">Picked the wrong name? Cancel the request</button>
+          </form>
         </>
       ) : (
         <>
-          <h1 className="text-lg font-bold">Welcome!</h1>
-          <p className="text-sm text-muted">
-            You&apos;re signed in as <b className="text-ink">{v.email}</b>, but this account isn&apos;t in the league
-            yet.
-          </p>
-          <p className="mt-2 text-sm text-muted">
-            To join, open the invite link a league member sent you. No link? Ask in the group chat.
+          <h1 className="text-lg font-bold">Welcome{first ? `, ${first}` : ""}!</h1>
+          <p className="text-sm text-muted">Enter your league&apos;s code to join it.</p>
+          <div className="mt-3">
+            <CodeForm autoFocus />
+          </div>
+          <p className="mt-3 text-xs text-muted">
+            Got a link or an email invite instead? Just open it. No code? Ask your league&apos;s commissioner.
           </p>
         </>
       )}
       <form
-        className="mt-4"
+        className="mt-5 border-t border-line pt-3"
         action={async () => {
           "use server";
           await signOut({ redirectTo: "/signin" });
         }}
       >
-        <button className="text-sm text-muted underline">Wrong account? Sign out</button>
+        <button className="text-xs text-muted underline">Signed in as {v.email}. Not you? Sign out</button>
       </form>
     </PlainShell>
   );

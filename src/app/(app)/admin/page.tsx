@@ -1,10 +1,10 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { getDb } from "@/db";
 import { activityLog, invites, players, races, users } from "@/db/schema";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { CopyLink } from "@/components/copy-link";
-import { getOrCreateJoinLink } from "@/lib/league";
+import { getLeague } from "@/lib/league";
 import { appUrl } from "@/lib/mail";
 import { requireMember } from "@/lib/session";
 import * as act from "@/app/actions";
@@ -31,7 +31,8 @@ export default async function Admin() {
   const boss = v.isCommissioner;
   const claimant = alias(users, "claimant");
 
-  const [roster, link, pending, log] = await Promise.all([
+  const leagueId = v.player.leagueId;
+  const [roster, league, pending, log] = await Promise.all([
     db
       .select({
         id: players.id,
@@ -46,25 +47,34 @@ export default async function Admin() {
       .leftJoin(users, eq(users.id, players.userId))
       .leftJoin(claimant, eq(claimant.id, players.claimRequestedBy))
       .leftJoin(races, eq(races.id, players.joinedAtRaceId))
+      .where(eq(players.leagueId, leagueId))
       .orderBy(desc(players.active), players.displayName),
-    getOrCreateJoinLink(db, v.userId),
+    getLeague(db, leagueId),
     db
       .select({ id: invites.id, email: invites.email, createdAt: invites.createdAt })
       .from(invites)
-      .where(and(eq(invites.kind, "email"), eq(invites.active, true), isNull(invites.usedAt)))
+      .where(
+        and(eq(invites.leagueId, leagueId), eq(invites.kind, "email"), eq(invites.active, true), isNull(invites.usedAt)),
+      )
       .orderBy(desc(invites.createdAt)),
-    db.select().from(activityLog).orderBy(desc(activityLog.at)).limit(30),
+    db
+      .select()
+      .from(activityLog)
+      .where(or(eq(activityLog.leagueId, leagueId), isNull(activityLog.leagueId)))
+      .orderBy(desc(activityLog.at))
+      .limit(30),
   ]);
 
   const names = new Map<string, string>();
   for (const r of await db
     .select({ id: users.id, name: players.displayName })
     .from(players)
-    .innerJoin(users, eq(users.id, players.userId)))
+    .innerJoin(users, eq(users.id, players.userId))
+    .where(eq(players.leagueId, leagueId)))
     names.set(r.id, r.name);
 
   const claims = roster.filter((p) => p.claimEmail);
-  const joinUrl = `${appUrl()}/join/${link.token}`;
+  const joinUrl = `${appUrl()}/join/${league.code}`;
 
   return (
     <div className="grid gap-3 lg:grid-cols-[1fr_340px]">
@@ -202,7 +212,12 @@ export default async function Admin() {
 
       <div className="grid gap-3 content-start">
         <Card title="Invite friends" note="anyone can">
-          <p className="text-xs text-muted">Share the join link, e.g. in the group chat:</p>
+          <p className="text-xs text-muted">League code</p>
+          <p className={`text-2xl font-bold tracking-[0.2em] ${league.codeActive ? "" : "text-muted line-through"}`}>
+            {league.code}
+          </p>
+          {!league.codeActive && <p className="text-xs text-down">Joining by code is paused.</p>}
+          <p className="mt-2 text-xs text-muted">Or share this link (it fills in the code):</p>
           <CopyLink url={joinUrl} />
           <ActionForm action={act.inviteByEmail} className="mt-3 flex gap-2">
             <input
@@ -215,18 +230,21 @@ export default async function Admin() {
             <SubmitButton>Email invite</SubmitButton>
           </ActionForm>
           {boss && (
-            <ActionForm
-              action={act.resetLink}
-              className="mt-3 flex gap-1"
-              confirm="The current join link will stop working. Continue?"
-            >
-              <SubmitButton name="mode" value="new" variant="quiet">
-                New link
-              </SubmitButton>
-              <SubmitButton name="mode" value="off" variant="quiet">
-                Turn link off
-              </SubmitButton>
-            </ActionForm>
+            <div className="mt-3 flex flex-wrap gap-1">
+              <ActionForm
+                action={act.leagueCode}
+                confirm="Make a new code? The current code and link will stop working."
+              >
+                <SubmitButton name="mode" value="new" variant="quiet">
+                  New code
+                </SubmitButton>
+              </ActionForm>
+              <ActionForm action={act.leagueCode}>
+                <SubmitButton name="mode" value={league.codeActive ? "pause" : "resume"} variant="quiet">
+                  {league.codeActive ? "Pause joining" : "Resume joining"}
+                </SubmitButton>
+              </ActionForm>
+            </div>
           )}
           {pending.length > 0 && (
             <ul className="mt-3 grid gap-1 text-sm">

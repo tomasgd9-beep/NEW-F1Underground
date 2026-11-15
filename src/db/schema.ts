@@ -222,15 +222,30 @@ export const pricePeers = pgTable("price_peers", {
     .references(() => seasons.id),
 });
 
-/** A league member. One account = one player; 2026 players exist before they sign in. */
+/**
+ * A league. Only F1 Underground for now, but every membership, invite and log
+ * entry belongs to one, so more leagues can be switched on later.
+ */
+export const leagues = pgTable("leagues", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  /** Code people type (or open as /join/CODE) to join. Stored upper-case. */
+  code: text("code").notNull().unique(),
+  /** Commissioners can pause joining by code. */
+  codeActive: boolean("code_active").notNull().default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+/** A league member. One account = one player per league; 2026 players exist before they sign in. */
 export const players = pgTable(
   "players",
   {
     id: serial("id").primaryKey(),
+    leagueId: integer("league_id")
+      .notNull()
+      .references(() => leagues.id),
     displayName: text("display_name").notNull(),
-    userId: text("user_id")
-      .unique()
-      .references(() => users.id, { onDelete: "set null" }),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
     /** A signed-in user who says "this is me"; a commissioner confirms before userId is set. */
     claimRequestedBy: text("claim_requested_by").references(() => users.id, { onDelete: "set null" }),
     role: playerRole("role").notNull().default("player"),
@@ -238,7 +253,10 @@ export const players = pgTable(
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("players_display_name").on(sql`lower(${t.displayName})`)],
+  (t) => [
+    uniqueIndex("players_display_name").on(t.leagueId, sql`lower(${t.displayName})`),
+    uniqueIndex("players_league_user").on(t.leagueId, t.userId),
+  ],
 );
 
 /** A player's team for one race. */
@@ -270,6 +288,9 @@ export const invites = pgTable(
   "invites",
   {
     id: serial("id").primaryKey(),
+    leagueId: integer("league_id")
+      .notNull()
+      .references(() => leagues.id),
     kind: inviteKind("kind").notNull(),
     token: text("token").notNull().unique(),
     email: text("email"),
@@ -302,6 +323,8 @@ export const activityLog = pgTable(
   "activity_log",
   {
     id: serial("id").primaryKey(),
+    /** Empty for site-wide events (e.g. the scheduled job). */
+    leagueId: integer("league_id").references(() => leagues.id),
     /** User id, or "job" for the scheduled job. */
     actor: text("actor").notNull(),
     action: text("action").notNull(),

@@ -30,17 +30,20 @@ async function main() {
   const newbie = await mk("new@example.com", "New Person");
   const guest = await mk("guest@example.com", "Guest");
 
+  // The migrations already created the league; give it an easy demo code.
+  const [league] = await db.update(schema.leagues).set({ code: "DEMO42" }).returning();
+  const leagueId = league.id;
   await db.insert(schema.players).values([
-    { displayName: "Tomás", userId: tomas.id, role: "commissioner" },
-    { displayName: "Ana", userId: ana.id },
-    { displayName: "JB" },
-    { displayName: "IV", claimRequestedBy: newbie.id },
+    { leagueId, displayName: "Tomás", userId: tomas.id, role: "commissioner" as const },
+    { leagueId, displayName: "Ana", userId: ana.id },
+    { leagueId, displayName: "JB" },
+    { leagueId, displayName: "IV", claimRequestedBy: newbie.id },
   ]);
   await db.insert(schema.invites).values([
-    { kind: "link", token: "demo-join-link", invitedByUserId: tomas.id },
-    { kind: "email", token: "demo-email", email: "friend@example.com", invitedByUserId: ana.id },
+    { leagueId, kind: "email" as const, token: "demo-email", email: "friend@example.com", invitedByUserId: ana.id },
   ]);
-  await db.insert(schema.activityLog).values([{ actor: tomas.id, action: "player_added", detail: {} }]);
+  await db.insert(schema.activityLog).values([{ leagueId, actor: tomas.id, action: "player_added", detail: {} }]);
+  console.log("League code: DEMO42");
 
   const expires = new Date(Date.now() + 30 * day);
   for (const [who, u] of [["tomas", tomas], ["ana", ana], ["new", newbie], ["guest", guest]] as const) {

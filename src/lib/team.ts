@@ -244,6 +244,6 @@ export async function savePicks(
     .values({ playerId: player.id, raceId, ...values })
     .onConflictDoUpdate({ target: [picksTable.playerId, picksTable.raceId], set: values });
   const price = teamPrice(clean, byId);
-  await logActivity(db, userId, "team_saved", { raceId, playerId: player.id });
+  await logActivity(db, userId, "team_saved", { raceId, playerId: player.id }, { leagueId: player.leagueId });
   return { savedAt: now, price, penalty: budgetPenalty(price, race.budget) };
 }

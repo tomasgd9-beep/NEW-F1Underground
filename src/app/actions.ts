@@ -29,7 +29,7 @@ const str = (f: FormData, k: string) => String(f.get(k) ?? "");
 export async function joinNew(_: ActionResult, f: FormData): Promise<ActionResult> {
   const v = await requireViewer();
   const res = await attempt(async () => {
-    await league.joinAsNewPlayer(getDb(), { id: v.userId }, str(f, "token"), str(f, "name"));
+    await league.joinAsNewPlayer(getDb(), { id: v.userId }, str(f, "key"), str(f, "name"));
   });
   if (res?.error) return res;
   redirect("/team");
@@ -38,7 +38,7 @@ export async function joinNew(_: ActionResult, f: FormData): Promise<ActionResul
 export async function joinClaim(_: ActionResult, f: FormData): Promise<ActionResult> {
   const v = await requireViewer();
   const res = await attempt(async () => {
-    await league.requestClaim(getDb(), { id: v.userId }, str(f, "token"), num(f, "playerId"));
+    await league.requestClaim(getDb(), { id: v.userId }, str(f, "key"), num(f, "playerId"));
   });
   if (res?.error) return res;
   redirect("/welcome");
@@ -62,13 +62,23 @@ export async function inviteByEmail(_: ActionResult, f: FormData): Promise<Actio
 
 /* ───────────── Commissioner ───────────── */
 
-export async function resetLink(_: ActionResult, f: FormData): Promise<ActionResult> {
+export async function leagueCode(_: ActionResult, f: FormData): Promise<ActionResult> {
   const v = await requireViewer();
   return attempt(async () => {
-    const makeNew = str(f, "mode") === "new";
-    await league.resetJoinLink(getDb(), v.userId, makeNew);
-    return makeNew ? "New join link made; the old one no longer works." : "Join link turned off.";
+    const mode = str(f, "mode");
+    if (mode === "new") {
+      const l = await league.regenerateCode(getDb(), v.userId);
+      return `New code ${l.code}. The old one no longer works.`;
+    }
+    await league.setCodeActive(getDb(), v.userId, mode === "resume");
+    return mode === "resume" ? "Joining by code is on." : "Joining by code is paused. Email invites still work.";
   });
+}
+
+export async function withdrawClaim(): Promise<void> {
+  const v = await requireViewer();
+  await league.withdrawClaim(getDb(), v.userId);
+  redirect("/welcome");
 }
 
 export async function cancelInvite(_: ActionResult, f: FormData): Promise<ActionResult> {
