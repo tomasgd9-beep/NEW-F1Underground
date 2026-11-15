@@ -96,8 +96,14 @@ async function seedGrid(db: any, r1: number, r2: number) {
     ]),
   ]);
   await db.insert(schema.assetPoints).values([
-    ...st.map((s: { id: number }, i: number) => ({ raceId: r1, stintId: s.id, total: String(fake(i)), isFinal: true })),
-    ...TEAMS.map(([t], i) => ({ raceId: r1, constructorId: teamId.get(t), total: String(fake(i + 3) * 2), isFinal: true })),
+    ...st.map((s: { id: number }, i: number) => ({
+      raceId: r1, stintId: s.id, total: String(fake(i)), raceTotal: String(fake(i)), isFinal: true,
+      breakdown: { Q: { pos: 2, team: 0, total: 2 }, R: { pos: fake(i) - 2, gained: 0, overtakes: 0, fastestLap: 0, dotdPit: 0, total: fake(i) - 2 } },
+    })),
+    ...TEAMS.map(([t], i) => ({
+      raceId: r1, constructorId: teamId.get(t), total: String(fake(i + 3) * 2), isFinal: true,
+      breakdown: { R: { pos: fake(i + 3) * 2, gained: 0, overtakes: 0, fastestLap: 0, dotdPit: 0, total: fake(i + 3) * 2 } },
+    })),
   ]);
 }
 

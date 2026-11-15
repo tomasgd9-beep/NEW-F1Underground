@@ -138,3 +138,86 @@ export async function deletePlaceholder(_: ActionResult, f: FormData): Promise<A
   const v = await requireViewer();
   return attempt(() => league.deletePlaceholder(getDb(), v.userId, num(f, "playerId")));
 }
+
+/* ───────────── Race control (commissioners) ───────────── */
+
+async function commissionerOrError() {
+  const v = await requireViewer();
+  if (!v.isCommissioner) throw new league.LeagueError("Only commissioners can do that.");
+  return v;
+}
+
+export async function syncNow(): Promise<ActionResult> {
+  return attempt(async () => {
+    const v = await commissionerOrError();
+    const { runScheduledJob } = await import("@/lib/job");
+    let r;
+    try {
+      r = await runScheduledJob(getDb(), v.userId);
+    } catch (e) {
+      const msg = e instanceof Error ? (e.cause instanceof Error ? `${e.message} (${e.cause.message})` : e.message) : String(e);
+      throw new league.LeagueError(`Sync failed: ${msg}`);
+    }
+    return [
+      `Synced: ${r.sync?.current} (${r.sync?.state}), next ${r.sync?.next ?? "none"}, ${r.sync?.points} assets scored.`,
+      r.lock ? `Locked ${r.lock.race}.` : "",
+      r.prices ? `Priced ${r.prices.race}.` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  });
+}
+
+export async function lockNow(): Promise<ActionResult> {
+  return attempt(async () => {
+    const v = await commissionerOrError();
+    const { currentRace } = await import("@/lib/team");
+    const { lockRace } = await import("@/lib/sync");
+    const { fetchExpectedPoints } = await import("@/lib/fft");
+    const db = getDb();
+    const race = await currentRace(db);
+    if (!race) throw new league.LeagueError("No race is open.");
+    if (race.lockedAt) throw new league.LeagueError(`${race.label} is already locked.`);
+    const xp = (await fetchExpectedPoints(race.round))?.xp ?? null;
+    let res;
+    try {
+      res = await lockRace(db, race, xp, { force: true, actor: v.userId });
+    } catch (e) {
+      throw new league.LeagueError(e instanceof Error ? e.message : String(e));
+    }
+    const l = res?.leagues[0];
+    return l
+      ? `Locked ${race.label}: ${l.kept} kept, ${l.autoFilled} auto-filled, ${l.random} random.`
+      : `Locked ${race.label}.`;
+  });
+}
+
+export async function importPricesAction(_: ActionResult, f: FormData): Promise<ActionResult> {
+  return attempt(async () => {
+    const v = await commissionerOrError();
+    const { currentRace } = await import("@/lib/team");
+    const { importPrices } = await import("@/lib/sync");
+    const db = getDb();
+    const race = await currentRace(db);
+    if (!race) throw new league.LeagueError("No race is open.");
+    if (race.lockedAt) throw new league.LeagueError(`${race.label} is locked; its prices are frozen.`);
+    const r = await importPrices(db, race, str(f, "prices"));
+    await league.logActivity(db, v.userId, "prices_imported", { race: race.label, set: r.set }, {
+      leagueId: v.player?.leagueId,
+    });
+    return `Set ${r.set} prices for ${race.label}.${r.unknown.length ? ` Not recognised: ${r.unknown.join(", ")}.` : ""}`;
+  });
+}
+
+export async function renameRace(_: ActionResult, f: FormData): Promise<ActionResult> {
+  return attempt(async () => {
+    const v = await commissionerOrError();
+    const { races } = await import("@/db/schema");
+    const { eq } = await import("drizzle-orm");
+    const label = str(f, "label").trim().toUpperCase();
+    if (!/^[A-Z0-9 ]{2,12}$/.test(label)) throw new league.LeagueError("Use up to 12 letters and numbers, e.g. R23 VEG.");
+    await getDb().update(races).set({ label }).where(eq(races.id, num(f, "raceId")));
+    await league.logActivity(getDb(), v.userId, "race_renamed", { label }, { leagueId: v.player?.leagueId });
+    return `Renamed to ${label}.`;
+  });
+}

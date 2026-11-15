@@ -1,15 +1,18 @@
-import { and, desc, eq, isNull, or } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { getDb } from "@/db";
 import { activityLog, invites, players, races, users } from "@/db/schema";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { CopyLink } from "@/components/copy-link";
 import { getLeague } from "@/lib/league";
+import { currentRace } from "@/lib/team";
+import { assetPrices } from "@/db/schema";
 import { appUrl } from "@/lib/mail";
 import { requireMember } from "@/lib/session";
 import * as act from "@/app/actions";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function Card({ title, children, note }: { title: string; children: React.ReactNode; note?: string }) {
   return (
@@ -60,10 +63,29 @@ export default async function Admin() {
     db
       .select()
       .from(activityLog)
-      .where(or(eq(activityLog.leagueId, leagueId), isNull(activityLog.leagueId)))
+      .where(
+        and(
+          or(eq(activityLog.leagueId, leagueId), isNull(activityLog.leagueId)),
+          // Routine 15-minute syncs only show when they fail.
+          sql`not (${activityLog.action} = 'sync' and ${activityLog.result} = 'ok')`,
+        ),
+      )
       .orderBy(desc(activityLog.at))
       .limit(30),
   ]);
+
+  const race = await currentRace(db);
+  const [priceCount] = race
+    ? await db.select({ n: sql<number>`count(*)::int` }).from(assetPrices).where(eq(assetPrices.raceId, race.id))
+    : [{ n: 0 }];
+  const [lastSync] = await db
+    .select()
+    .from(activityLog)
+    .where(eq(activityLog.action, "sync"))
+    .orderBy(desc(activityLog.at))
+    .limit(1);
+  const when = (d: Date) =>
+    d.toLocaleString("en-CA", { timeZone: "America/Toronto", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
   const names = new Map<string, string>();
   for (const r of await db
@@ -198,10 +220,89 @@ export default async function Admin() {
           </Card>
         )}
 
-        <Card title="Race control" note="phase 3">
-          <p className="text-sm text-muted">
-            Pull scores, lock teams, move to the next race and emergency sync arrive with the scheduled job.
+        <Card title="Race control" note="the job runs every 15 minutes">
+          {race ? (
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+              <dt className="text-muted">Race</dt>
+              <dd>
+                <b>{race.label}</b> · {race.name}
+                {race.isSprint && " · Sprint"}
+              </dd>
+              <dt className="text-muted">Deadline</dt>
+              <dd>{race.deadline ? when(race.deadline) : "not set"}{race.deadlineManual && " (set by hand)"}</dd>
+              <dt className="text-muted">Teams</dt>
+              <dd>{race.lockedAt ? <b className="text-red">Locked {when(race.lockedAt)}</b> : "Open"}</dd>
+              <dt className="text-muted">Results</dt>
+              <dd className="capitalize">{race.results === "none" ? "Not started" : race.results}</dd>
+              <dt className="text-muted">Prices</dt>
+              <dd className={priceCount.n ? "" : "text-down"}>
+                {priceCount.n ? `${priceCount.n} assets priced` : "None yet: import them below before the deadline"}
+              </dd>
+            </dl>
+          ) : (
+            <p className="text-sm text-muted">No race yet. Press Sync now to load the calendar from f1fantasytools.</p>
+          )}
+          <p className="mt-2 text-xs text-muted">
+            Last sync:{" "}
+            {lastSync ? (
+              <>
+                {when(lastSync.at)}
+                {lastSync.result !== "ok" && <span className="text-down"> · {lastSync.result}</span>}
+              </>
+            ) : (
+              "never"
+            )}
           </p>
+          {boss && (
+            <>
+              <div className="mt-3 flex flex-wrap gap-1">
+                <ActionForm action={act.syncNow}>
+                  <SubmitButton>Sync now</SubmitButton>
+                </ActionForm>
+                {race && !race.lockedAt && (
+                  <ActionForm
+                    action={act.lockNow}
+                    confirm={`Lock ${race.label} now, before the deadline? Empty and partial teams get filled.`}
+                  >
+                    <SubmitButton variant="quiet">Lock now</SubmitButton>
+                  </ActionForm>
+                )}
+              </div>
+              {race && (
+                <>
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-sm font-semibold">Import prices for {race.label}</summary>
+                    <ActionForm action={act.importPricesAction} className="mt-2">
+                      <p className="mb-1 text-xs text-muted">
+                        Paste from the sheet&apos;s Team Builder (columns A to H) or type one per line, e.g. VER 28.8.
+                        Replaces those assets&apos; prices for this race.
+                      </p>
+                      <textarea
+                        name="prices"
+                        rows={6}
+                        required
+                        className="w-full rounded border border-line bg-transparent p-2 font-mono text-xs"
+                        placeholder={"VER\t28.8\nANT\t27.5"}
+                      />
+                      <SubmitButton variant="quiet">Import prices</SubmitButton>
+                    </ActionForm>
+                  </details>
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-sm font-semibold">Rename {race.label}</summary>
+                    <ActionForm action={act.renameRace} className="mt-2 flex gap-2">
+                      <input type="hidden" name="raceId" value={race.id} />
+                      <input
+                        name="label"
+                        defaultValue={race.label}
+                        className="w-32 rounded border border-line bg-transparent px-2 py-1 uppercase"
+                      />
+                      <SubmitButton variant="quiet">Rename</SubmitButton>
+                    </ActionForm>
+                  </details>
+                </>
+              )}
+            </>
+          )}
         </Card>
       </div>
 

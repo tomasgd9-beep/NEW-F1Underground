@@ -70,6 +70,22 @@ the app sends from an ordinary Gmail account (500 emails a day, plenty).
 
 From now on every change pushed to GitHub publishes itself.
 
+## 7. The 15-minute job (GitHub)
+
+The job that syncs races and points, locks teams and prices the next race
+runs on GitHub. It needs the database address:
+
+1. vercel.com → the project → **Storage** → your Neon database → **Open in
+   Neon** → **Connect** → copy the connection string (starts with
+   `postgresql://`).
+2. github.com/tomasgd9-beep/NEW-F1Underground → **Settings → Secrets and
+   variables → Actions → New repository secret**. Name `DATABASE_URL`, paste
+   the value, **Add secret**.
+3. **Actions** tab → **League job** → **Run workflow** to run it once now.
+   After that it runs by itself every 15 minutes.
+
+If a run fails, Admin → Race control shows the error under "Last sync".
+
 ## Trying it on your own computer (optional, no accounts needed)
 
 1. Install Node.js (the "LTS" button on nodejs.org) once.

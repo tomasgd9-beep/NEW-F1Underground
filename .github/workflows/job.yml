@@ -1,0 +1,25 @@
+name: League job
+# Every 15 minutes: sync races and points from f1fantasytools, lock teams at
+# the deadline, price the next race. GitHub may start scheduled runs a few
+# minutes late; the website enforces the deadline itself, so that's fine.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+concurrency:
+  group: league-job
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npx tsx scripts/job.ts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
