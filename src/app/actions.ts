@@ -133,3 +133,8 @@ export async function testEmail(): Promise<ActionResult> {
     return { error: `Sending failed: ${msg}` };
   }
 }
+
+export async function deletePlaceholder(_: ActionResult, f: FormData): Promise<ActionResult> {
+  const v = await requireViewer();
+  return attempt(() => league.deletePlaceholder(getDb(), v.userId, num(f, "playerId")));
+}

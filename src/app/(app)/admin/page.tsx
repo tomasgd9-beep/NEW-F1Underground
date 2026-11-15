@@ -162,6 +162,12 @@ export default async function Admin() {
                                 <input type="hidden" name="active" value={p.active ? "0" : "1"} />
                                 <SubmitButton variant="quiet">{p.active ? "Deactivate" : "Reactivate"}</SubmitButton>
                               </ActionForm>
+                              {!p.email && !p.claimEmail && (
+                                <ActionForm action={act.deletePlaceholder} confirm={`Delete the profile ${p.name}?`}>
+                                  <input type="hidden" name="playerId" value={p.id} />
+                                  <SubmitButton variant="quiet">Delete</SubmitButton>
+                                </ActionForm>
+                              )}
                               {p.email && p.role !== "commissioner" && (
                                 <ActionForm
                                   action={act.unlink}
@@ -182,14 +188,20 @@ export default async function Admin() {
             </table>
           </div>
           {boss && (
-            <ActionForm action={act.addPlayer} className="mt-3 flex gap-2">
-              <input
-                name="name"
-                required
-                placeholder="Add a profile (e.g. a 2026 player)"
-                className="min-w-0 flex-1 rounded border border-line bg-transparent px-2 py-1"
-              />
-              <SubmitButton variant="quiet">Add</SubmitButton>
+            <ActionForm action={act.addPlayer} className="mt-3">
+              <p className="mb-1 text-xs text-muted">
+                Add someone from the 2026 sheet who hasn&apos;t signed up yet. When they join with the code, they pick
+                this name and you confirm it&apos;s them. (You&apos;re already linked: that&apos;s your COMM row.)
+              </p>
+              <div className="flex gap-2">
+                <input
+                  name="name"
+                  required
+                  placeholder="Their name as in the sheet, e.g. JB"
+                  className="min-w-0 flex-1 rounded border border-line bg-transparent px-2 py-1"
+                />
+                <SubmitButton variant="quiet">Add player</SubmitButton>
+              </div>
             </ActionForm>
           )}
         </Card>

@@ -192,3 +192,14 @@ describe("roles", () => {
     expect(log[0].leagueId).toBe(leagueId);
   });
 });
+
+describe("placeholder profiles", () => {
+  it("can be deleted only while nobody has signed in to them", async () => {
+    const t = await addPlayer(db, tomas.id, "Tomas");
+    const { deletePlaceholder } = await import("@/lib/league");
+    await deletePlaceholder(db, tomas.id, t.id);
+    expect(await unclaimedPlayers(db, leagueId)).toHaveLength(0);
+    const me = await getPlayerForUser(db, tomas.id);
+    await expect(deletePlaceholder(db, tomas.id, me!.id)).rejects.toThrow(/Deactivate/);
+  });
+});

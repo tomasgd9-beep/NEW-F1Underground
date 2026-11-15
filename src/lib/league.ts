@@ -6,7 +6,7 @@
 // league, so more leagues can be switched on later.
 import { and, asc, eq, gt, isNull, ne, sql } from "drizzle-orm";
 import type { Db } from "@/db";
-import { activityLog, invites, leagues, players, races, users } from "@/db/schema";
+import { activityLog, invites, leagues, picks, players, races, users } from "@/db/schema";
 
 export class LeagueError extends Error {}
 
@@ -411,4 +411,20 @@ export async function unlinkPlayer(db: Db, adminUserId: string, playerId: number
   if (p.role === "commissioner") throw new LeagueError("Make them a regular player first.");
   await db.update(players).set({ userId: null }).where(eq(players.id, playerId));
   await logActivity(db, adminUserId, "player_unlinked", { playerId, userId: p.userId }, { leagueId: me.leagueId });
+}
+
+/** Commissioner: delete a placeholder profile (never signed in, no picks, no pending claim). */
+export async function deletePlaceholder(db: Db, adminUserId: string, playerId: number) {
+  const me = await requireCommissioner(db, adminUserId);
+  const p = await playerInLeague(db, playerId, me.leagueId);
+  if (p.userId || p.claimRequestedBy) {
+    throw new LeagueError("Only profiles nobody has signed in to can be deleted. Deactivate this one instead.");
+  }
+  const [{ n }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(picks)
+    .where(eq(picks.playerId, playerId));
+  if (n > 0) throw new LeagueError("This profile has teams saved, so it can't be deleted. Deactivate it instead.");
+  await db.delete(players).where(eq(players.id, playerId));
+  await logActivity(db, adminUserId, "player_deleted", { playerId, name: p.displayName }, { leagueId: me.leagueId });
 }
