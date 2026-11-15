@@ -318,8 +318,8 @@ export function TeamBuilder({
             <thead className="text-xs text-muted">
               <tr>
                 <th className="py-1 pl-3 text-left font-semibold">{tab === "driver" ? "Driver" : "Constructor"}</th>
-                <th className="px-2 text-right font-semibold">Season</th>
-                <th className="px-2 text-right font-semibold">Last 3</th>
+                <th className="hidden px-2 text-right font-semibold min-[460px]:table-cell">Season</th>
+                <th className="hidden px-2 text-right font-semibold min-[520px]:table-cell">Last 3</th>
                 <th className="pr-3 text-right font-semibold">Price</th>
               </tr>
             </thead>
@@ -378,20 +378,25 @@ function Group({
                 <span className="h-6 w-1 shrink-0 rounded" style={{ background: a.colour }} />
                 <span className="w-4 text-center text-red">{picked ? "✓" : ""}</span>
                 <span className="min-w-0">
-                  <b>{a.ticker}</b>{" "}
-                  <span className="text-muted">
-                    <span className="hidden sm:inline">{a.name}</span>
-                    {a.kind === "driver" && <span className="sm:before:content-['_·_']">{a.team}</span>}
+                  <b>{a.ticker}</b>
+                  <span className="hidden text-muted sm:inline">
+                    {" "}
+                    {a.name}
+                    {a.kind === "driver" && ` · ${a.team}`}
                   </span>
                 </span>
               </div>
             </td>
-            <td className={`px-2 text-right ${a.season < 0 ? "text-down" : ""}`}>{pts(a.season)}</td>
-            <td className={`px-2 text-right ${a.last3 < 0 ? "text-down" : ""}`}>{pts(a.last3)}</td>
+            <td className={`hidden px-2 text-right min-[460px]:table-cell ${a.season < 0 ? "text-down" : ""}`}>
+              {pts(a.season)}
+            </td>
+            <td className={`hidden px-2 text-right min-[520px]:table-cell ${a.last3 < 0 ? "text-down" : ""}`}>
+              {pts(a.last3)}
+            </td>
             <td className="pr-3 text-right whitespace-nowrap">
               {fmt(a.price)}
               {a.move != null && a.move !== 0 && (
-                <span className={`ml-1 text-[11px] ${a.move > 0 ? "text-up" : "text-down"}`}>
+                <span className={`ml-1 hidden text-[11px] min-[580px]:inline ${a.move > 0 ? "text-up" : "text-down"}`}>
                   {a.move > 0 ? "▲" : "▼"}
                   {Math.abs(a.move).toFixed(2)}
                 </span>
