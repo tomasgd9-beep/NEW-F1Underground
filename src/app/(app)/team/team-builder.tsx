@@ -25,7 +25,7 @@ type RaceInfo = {
   locked: boolean;
 };
 
-const SLOT_LABEL: Record<Slot, string> = { double: "×2", d1: "D1", d2: "D2", d3: "D3", d4: "D4", team: "C" };
+const SLOT_LABEL: Record<Slot, string> = { double: "D1", d1: "D2", d2: "D3", d3: "D4", d4: "D5", team: "C" };
 type SortKey = "price" | "season" | "last3" | "name";
 
 const fmt = (n: number) => n.toFixed(2);
@@ -179,10 +179,9 @@ export function TeamBuilder({
                     locked ? "" : "cursor-pointer"
                   }`}
                 >
-                  <span
-                    className={`w-7 shrink-0 text-xs font-bold ${slot === "double" ? "text-red" : "text-muted"}`}
-                  >
+                  <span className="w-11 shrink-0 text-xs font-bold text-muted">
                     {SLOT_LABEL[slot]}
+                    {slot === "double" && <span className="ml-1 rounded bg-red px-1 text-[10px] text-white">×2</span>}
                   </span>
                   {a ? (
                     <>

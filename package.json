@@ -11,7 +11,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:local": "tsx scripts/local-db.ts",
-    "dev:local": "DATABASE_URL=pglite:./.pglite AUTH_SECRET=local-dev-secret AUTH_TRUST_HOST=true next dev"
+    "dev:local": "cross-env DATABASE_URL=pglite:./.pglite AUTH_SECRET=local-dev-secret AUTH_TRUST_HOST=true next dev"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",
@@ -33,6 +33,7 @@
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^10.1.0",
     "dotenv": "^18.0.10",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",

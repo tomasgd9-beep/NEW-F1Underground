@@ -51,17 +51,18 @@ commissioner. Then, on Admin:
 - add the 2026 players as profiles (they claim them when they join);
 - copy the join link into the group chat.
 
-## Local development without any accounts
+## Trying it on your own computer (optional, no accounts needed)
 
-```
-npm install
-npm run db:local     # demo database in ./.pglite, prints demo session cookies
-npm run dev:local    # http://localhost:3000
-```
+1. Install Node.js (the "LTS" button on nodejs.org) once.
+2. Open this folder in a terminal (in GitHub Desktop: Repository → Open in
+   Command Prompt / Terminal).
+3. Run, one at a time: `npm install`, then `npm run db:local`, then
+   `npm run dev:local`.
+4. Open http://localhost:3000 and click **Local demo: skip sign-in**.
+5. To stop it, press Ctrl+C in the terminal.
 
 Sign-in links and invite emails are printed in the terminal instead of sent.
-To skip sign-in, set the cookie `authjs.session-token=demo-session-tomas` in
-your browser's dev tools.
+`npm run db:local` resets the demo data whenever you want a clean start.
 
 ## Checks
 
