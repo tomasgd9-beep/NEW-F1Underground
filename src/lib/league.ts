@@ -282,7 +282,7 @@ export async function joinAsNewPlayer(db: Db, user: { id: string }, key: string,
   if (await pendingClaimForUser(db, user.id)) throw new LeagueError("You already have a request waiting for a commissioner.");
   const name = cleanName(rawName);
   if (await nameTaken(db, jk.league.id, name)) {
-    throw new LeagueError("That name is taken. If it's you, choose \"I already play\" instead.");
+    throw new LeagueError("Someone in the league already uses that name. Add a surname initial, e.g. \"Tomas G\".");
   }
   const [p] = await db
     .insert(players)

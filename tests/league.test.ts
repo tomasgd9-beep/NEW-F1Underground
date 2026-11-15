@@ -95,7 +95,7 @@ describe("league code", () => {
 
   it("refuses a taken name, case-insensitively", async () => {
     const u = await makeUser(db, "c@example.com");
-    await expect(joinAsNewPlayer(db, u, code, "tomás")).rejects.toThrow(/taken/);
+    await expect(joinAsNewPlayer(db, u, code, "tomás")).rejects.toThrow(/already uses/);
   });
 
   it("refuses a wrong code with a clear message", async () => {
