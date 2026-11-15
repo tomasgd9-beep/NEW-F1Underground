@@ -1,26 +1,46 @@
 @import "tailwindcss";
 
+/* Colours from the plan's "Look and feel" section (starting values, tune by eye). */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --navy: #15151e;
+  --red: #e10600;
+  --bg: #f6f4f1;
+  --card: #ffffff;
+  --border: #e4e0da;
+  --ink: #15151e;
+  --muted: #6b6b76;
+  --up: #1f6feb;
+  --down: #e10600;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg: #15151e;
+    --card: #1f1f2b;
+    --border: #2e2e3c;
+    --ink: #f2f2f5;
+    --muted: #a0a0ad;
+    --up: #58a6ff;
+    --down: #ff5c55;
   }
 }
 
+@theme inline {
+  --color-navy: var(--navy);
+  --color-red: var(--red);
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-line: var(--border);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --font-sans: "Titillium Web", ui-sans-serif, system-ui, sans-serif;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
 }

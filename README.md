@@ -1,36 +1,30 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# F1 Underground
 
-## Getting Started
+The F1 Underground fantasy league, moving from a Google Sheet to a website
+for the 2027 season. The full plan is the "F1 Underground — Web App Plan"
+doc; first-time setup is in [SETUP.md](SETUP.md).
 
-First, run the development server:
+Stack: Next.js on Vercel · Neon Postgres + Drizzle · Auth.js (Google or
+emailed link) · a scheduled GitHub Actions job (from phase 3).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Phases
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1. **Foundation** ← done: schema for the whole data model, sign-in, join
+   link and email invites, claiming a 2026 profile, commissioner role,
+   Admin → Players / Invites / Activity.
+2. My team: team builder, saved picks, server-side deadline, penalty.
+3. Scheduled job + Points page.
+4. League + Admin race control.
+5. History import, Archive page, replay test against the sheet.
+6. Reminder and post-race emails.
+7. Soft launch alongside the sheet.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Layout
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `src/db/schema.ts`: every table; `drizzle/`: generated SQL migrations
+  (`npm run db:generate` after changing the schema).
+- `src/lib/league.ts`: membership rules (invites, joining, roles), each
+  function taking the database so tests run it on PGlite.
+- `src/app/(app)/`: pages behind sign-in, sharing the slim top bar.
+- `src/app/actions.ts`: server actions that wrap the league rules.
+- `tests/`: Vitest against an in-memory Postgres.
