@@ -1,61 +1,80 @@
 # Setting up F1 Underground
 
-About 30 minutes, all free tiers. Do the steps in order; each one gives you a
-value for the environment variables listed in `.env.example`.
+About 30 minutes, all free tiers, no commands to type. Keep a note open
+(Notepad is fine) to paste values into as you go.
 
-## 1. Neon (database)
+## 1. Point Vercel at the new code
 
-1. Sign up at neon.tech, create a project called `f1-underground`.
-2. Copy the **pooled** connection string → `DATABASE_URL`.
-3. On your computer, in this repo: `npm install`, put `DATABASE_URL` in
-   `.env.local`, then run `npm run db:migrate` to create the tables.
+The existing Vercel project (f1-underground.vercel.app) runs the old app.
+Re-using it keeps the same address for everyone.
 
-## 2. Gmail app password (emails)
+1. vercel.com → your **f1-underground** project → **Settings → Git**.
+2. **Disconnect** the old repository, then **Connect Git Repository** →
+   GitHub → **NEW-F1Underground**. (If GitHub asks, allow Vercel access to
+   that repository.)
+3. Settings → **Build and Deployment**: Framework Preset should say
+   Next.js. Leave the commands empty (the defaults are right).
+4. Settings → **Environment Variables**: delete the old Supabase variables
+   (anything starting with `SUPABASE` or `NEXT_PUBLIC_SUPABASE`) and the old
+   admin password variable.
+
+## 2. Database (Neon, through Vercel)
+
+1. In the project, open the **Storage** tab → **Create Database** → **Neon**
+   (Serverless Postgres) → accept the free plan, region **US East**.
+2. Connect it to the project for all environments. Vercel adds
+   `DATABASE_URL` for you; nothing to copy.
+
+The tables are created automatically on the next deploy.
+
+## 3. Sign-in secret
+
+1. Open https://generate-secret.vercel.app/32 and copy the text it shows.
+2. Vercel → Settings → Environment Variables → add `AUTH_SECRET` = that text.
+
+## 4. Email (Gmail app password)
 
 The free `*.vercel.app` address can't be verified with an email service, so
 the app sends from an ordinary Gmail account (500 emails a day, plenty).
 
-1. Google Account → Security → turn on 2-Step Verification if it's off.
-2. Search "App passwords", create one called `F1 Underground`.
-3. `EMAIL_SERVER=smtps://YOUR_GMAIL%40gmail.com:APP_PASSWORD@smtp.gmail.com:465`
-   (the `@` in your address is written `%40`; remove spaces from the password).
-4. `EMAIL_FROM="F1 Underground <YOUR_GMAIL@gmail.com>"`
+1. myaccount.google.com → **Security** → make sure **2-Step Verification**
+   is on.
+2. Search the page for **App passwords**, create one named `F1 Underground`,
+   copy the 16 letters (no spaces).
+3. Add to Vercel:
+   - `EMAIL_SERVER` = `smtps://YOURNAME%40gmail.com:THE16LETTERS@smtp.gmail.com:465`
+     (write your Gmail address with `%40` instead of `@`)
+   - `EMAIL_FROM` = `F1 Underground <YOURNAME@gmail.com>`
 
-## 3. Vercel (website)
+## 5. Google sign-in
 
-1. Sign up at vercel.com with GitHub, **Add New → Project**, import
-   `f1-underground`. Framework: Next.js (auto-detected). Deploy once; it will
-   fail without variables, that's fine. Note the address, e.g.
-   `https://f1-underground.vercel.app`.
-2. Settings → Environment Variables: add every variable from `.env.example`
-   (`AUTH_SECRET`: run `npx auth secret` and copy the value).
-3. Redeploy.
+1. console.cloud.google.com → project picker → **New project** →
+   `F1 Underground`.
+2. **APIs & Services → OAuth consent screen** → External → app name
+   `F1 Underground`, your email in both email fields → save. Then
+   **Publish app** (no Google review is needed for name and email only).
+3. **Credentials → Create credentials → OAuth client ID** → Web
+   application. Under **Authorised redirect URIs** add
+   `https://f1-underground.vercel.app/api/auth/callback/google`.
+4. Copy the **Client ID** and **Client secret** into Vercel as
+   `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`.
 
-## 4. Google sign-in
+## 6. You as commissioner, then publish
 
-1. console.cloud.google.com → new project `F1 Underground`.
-2. APIs & Services → OAuth consent screen: External, app name
-   `F1 Underground`, your email; publish it (no review is needed for just
-   name/email).
-3. Credentials → Create credentials → OAuth client ID → Web application.
-   Authorised redirect URI:
-   `https://YOUR-APP.vercel.app/api/auth/callback/google`
-4. Copy the client ID and secret → `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` in
-   Vercel, redeploy.
+1. Vercel: add `BOOTSTRAP_COMMISSIONER_EMAILS` = your Gmail address.
+2. **Deployments** tab → the latest one → **⋯ → Redeploy**. Wait for
+   "Ready" (about 2 minutes).
+3. Open https://f1-underground.vercel.app and sign in with that Gmail
+   address: you're the commissioner. On **Admin**, add the 2026 players as
+   profiles and copy the join link.
 
-## 5. First sign-in
-
-Sign in with the email in `BOOTSTRAP_COMMISSIONER_EMAILS`; you become
-commissioner. Then, on Admin:
-
-- add the 2026 players as profiles (they claim them when they join);
-- copy the join link into the group chat.
+From now on every change pushed to GitHub publishes itself.
 
 ## Trying it on your own computer (optional, no accounts needed)
 
 1. Install Node.js (the "LTS" button on nodejs.org) once.
 2. Open this folder in a terminal (in GitHub Desktop: Repository → Open in
-   Command Prompt / Terminal).
+   Command Prompt).
 3. Run, one at a time: `npm install`, then `npm run db:local`, then
    `npm run dev:local`.
 4. Open http://localhost:3000 and click **Local demo: skip sign-in**.
@@ -64,10 +83,10 @@ commissioner. Then, on Admin:
 Sign-in links and invite emails are printed in the terminal instead of sent.
 `npm run db:local` resets the demo data whenever you want a clean start.
 
-## Checks
+## Checks (for developers)
 
 ```
 npm test        # league rules against a real Postgres (PGlite)
 npm run lint
-npm run build
+npm run build   # also updates the database when DATABASE_URL is set
 ```
