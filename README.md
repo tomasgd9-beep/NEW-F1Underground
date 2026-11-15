@@ -16,7 +16,8 @@ emailed link) · a scheduled GitHub Actions job (from phase 3).
    the server, live over-budget penalty, Season / Last 3 / price moves.
 3. Scheduled job + Points page.
 4. League + Admin race control.
-5. History import, Archive page, replay test against the sheet.
+5. History import, past seasons (season chip on League), replay test
+   against the sheet.
 6. Reminder and post-race emails.
 7. Soft launch alongside the sheet.
 

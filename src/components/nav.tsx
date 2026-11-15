@@ -7,7 +7,6 @@ export const TABS = [
   { href: "/team", label: "My team" },
   { href: "/points", label: "Points" },
   { href: "/league", label: "League" },
-  { href: "/archive", label: "Archive" },
   { href: "/admin", label: "Admin" },
 ] as const;
 
@@ -38,7 +37,7 @@ export function TopTabs() {
 export function BottomTabs() {
   const path = usePathname();
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-navy grid grid-cols-5 border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-navy grid grid-cols-4 border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
       {TABS.map((t) => {
         const on = path.startsWith(t.href);
         return (
