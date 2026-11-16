@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import type { PointsRow } from "@/lib/points";
 
-type SortKey = "total" | "season" | "last3" | "picked" | "ticker";
+type SortKey = "total" | "season" | "last3" | "picked" | "doubled" | "ticker";
 
 const f = (n: number | null | undefined) => (n == null ? "–" : Number.isInteger(n) ? String(n) : n.toFixed(1));
 const neg = (n: number | null | undefined) => (n != null && n < 0 ? "text-down" : "");
@@ -119,7 +119,7 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
                   {g.name}
                 </th>
               ))}
-              <th colSpan={locked ? 4 : 3} />
+              <th colSpan={3 + (locked ? (isDriver ? 2 : 1) : 0)} />
             </tr>
             <tr>
               <th className="py-1 pl-3 text-left font-semibold">{sortBtn("ticker", isDriver ? "Driver" : "Constructor")}</th>
@@ -136,7 +136,8 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
               <th className="px-2 text-right font-semibold">{sortBtn("total", "Total")}</th>
               <th className={`${STAT} px-2 text-right font-semibold`}>{sortBtn("season", "Season")}</th>
               <th className={`${STAT} px-2 text-right font-semibold`}>{sortBtn("last3", "Last 3")}</th>
-              {locked && <th className="pr-3 text-right font-semibold">{sortBtn("picked", "Picked")}</th>}
+              {locked && isDriver && <th className="px-2 text-right font-semibold">{sortBtn("doubled", "×2")}</th>}
+              {locked && <th className="pr-3 text-right font-semibold">{sortBtn("picked", isDriver ? "×1" : "Picked")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -174,16 +175,14 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
                     <td className={`px-2 text-right font-bold ${neg(r.total)}`}>{f(r.total)}</td>
                     <td className={`${STAT} px-2 text-right ${neg(r.season)}`}>{f(r.season)}</td>
                     <td className={`${STAT} px-2 text-right ${neg(r.last3)}`}>{f(r.last3)}</td>
-                    {locked && (
-                      <td className="pr-3 text-right whitespace-nowrap">
-                        {r.picked}
-                        {r.doubled ? <span className="ml-1 text-[11px] text-red">×2:{r.doubled}</span> : null}
-                      </td>
+                    {locked && isDriver && (
+                      <td className={`px-2 text-right ${r.doubled ? "font-semibold text-red" : "text-muted"}`}>{r.doubled}</td>
                     )}
+                    {locked && <td className={`pr-3 text-right ${r.picked ? "" : "text-muted"}`}>{r.picked}</td>}
                   </tr>
                   {isOpen && (
                     <tr className="bg-black/[.03] md:hidden dark:bg-white/[.04]">
-                      <td colSpan={nBrk + (locked ? 5 : 4)} className="px-3 pb-2 text-xs">
+                      <td colSpan={nBrk + 4 + (locked ? (isDriver ? 2 : 1) : 0)} className="px-3 pb-2 text-xs">
                         <div className="mb-1 text-muted">
                           {r.name}
                           {r.kind === "driver" && ` · ${r.team}`}

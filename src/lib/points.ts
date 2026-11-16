@@ -69,8 +69,8 @@ export async function pointsForRace(db: Db, raceId: number, leagueId: number): P
       .innerJoin(players, eq(players.id, picks.playerId))
       .where(and(eq(picks.raceId, raceId), eq(players.leagueId, leagueId)));
     for (const { picks: p } of rows) {
+      // "picked" counts ×1 picks only; ×2 picks are counted separately.
       const ids = [
-        p.doubleStintId && `s${p.doubleStintId}`,
         ...[p.driver1StintId, p.driver2StintId, p.driver3StintId, p.driver4StintId].map((v) => v && `s${v}`),
         p.constructorId && `c${p.constructorId}`,
       ].filter(Boolean) as string[];
