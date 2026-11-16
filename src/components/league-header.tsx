@@ -24,11 +24,11 @@ export function LeagueHeader({
   const [copied, setCopied] = useState(false);
   const current = seasons.find((s) => s.id === seasonId);
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <h1 className="text-lg font-bold">{leagueName}</h1>
+    <div className="flex items-center gap-1.5 sm:gap-2">
+      <h1 className="truncate text-base font-bold sm:text-lg">{leagueName}</h1>
       {current && (
-        <details className="relative">
-          <summary className="cursor-pointer list-none rounded-full border border-line bg-card px-2.5 py-0.5 text-sm font-semibold">
+        <details className="relative shrink-0">
+          <summary className="cursor-pointer list-none rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold whitespace-nowrap sm:px-2.5 sm:text-sm">
             {current.year} ▾
           </summary>
           <div className="absolute left-0 z-20 mt-1 min-w-24 rounded border border-line bg-card py-1 shadow">
@@ -52,15 +52,15 @@ export function LeagueHeader({
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           }}
-          className="flex items-center gap-1.5 rounded border border-line bg-card px-2 py-0.5 text-sm"
+          className="flex shrink-0 items-center gap-1 rounded border border-line bg-card px-1.5 py-0.5 text-xs sm:gap-1.5 sm:px-2 sm:text-sm"
           title="Copy the join link"
         >
-          <span className="text-muted">Code</span>
-          <b className="tracking-widest">{code}</b>
-          <span className="font-semibold text-red">{copied ? "Copied" : "Copy link"}</span>
+          <span className="hidden text-muted sm:inline">Code</span>
+          <b className="sm:tracking-widest">{code}</b>
+          <span className="font-semibold text-red">{copied ? "Copied" : <><span className="sm:hidden">Copy</span><span className="hidden sm:inline">Copy link</span></>}</span>
         </button>
       )}
-      {right && <div className="ml-auto">{right}</div>}
+      {right && <div className="ml-auto shrink-0">{right}</div>}
     </div>
   );
 }

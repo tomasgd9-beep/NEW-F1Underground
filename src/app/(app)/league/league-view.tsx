@@ -5,6 +5,7 @@ import type { LeagueData, LeagueRace } from "@/lib/league-data";
 import { heat, rankHistory, shareRanks, standings, teamScore, type StandingRow } from "@/lib/standings";
 import { SeasonGraph } from "./season-graph";
 import { LeagueHeader } from "@/components/league-header";
+import { RacePicker } from "@/components/race-picker";
 
 const f = (n: number | null | undefined) => (n == null ? "–" : Number.isInteger(n) ? String(n) : n.toFixed(1));
 const neg = (n: number | null | undefined) => (n != null && n < 0 ? "text-down" : "");
@@ -43,13 +44,13 @@ export function LeagueView({
       joinUrl={joinUrl}
       right={
         data && (
-          <div className="flex overflow-hidden rounded border border-line text-sm font-semibold">
+          <div className="flex overflow-hidden rounded border border-line text-xs font-semibold sm:text-sm">
             {(["race", "season"] as const).map((k) => (
               <button
                 key={k}
                 type="button"
                 onClick={() => setView(k)}
-                className={`px-3 py-1 ${view === k ? "bg-navy text-white" : "bg-card text-muted"}`}
+                className={`px-2 py-0.5 sm:px-3 sm:py-1 ${view === k ? "bg-navy text-white" : "bg-card text-muted"}`}
               >
                 {k === "race" ? "Race" : "Season"}
               </button>
@@ -164,23 +165,16 @@ function RaceView({
   const moveOf = (pid: number) => season.find((s) => s.playerId === pid)?.move ?? null;
 
   const raceSelector = (
-    <div className="flex flex-wrap items-center gap-1">
-      {data.races.map((r) => (
-        <button
-          key={r.id}
-          type="button"
-          onClick={() => {
-            setRaceId(r.id);
-            setChip(null);
-          }}
-          className={`rounded border px-2 py-0.5 text-sm font-semibold ${
-            r.id === race.id ? "border-navy bg-navy text-white" : "border-line bg-card text-muted"
-          }`}
-        >
-          {r.label}
-        </button>
-      ))}
-      <span className={`ml-1 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase ${BADGE[race.results]}`}>
+    <div className="flex items-center gap-2">
+      <RacePicker
+        races={data.races}
+        currentId={race.id}
+        onSelect={(id) => {
+          setRaceId(id);
+          setChip(null);
+        }}
+      />
+      <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase ${BADGE[race.results]}`}>
         {race.locked ? (race.results === "none" ? "Locked" : race.results) : "Open"}
       </span>
     </div>

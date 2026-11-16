@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { and, asc, desc, eq, ne } from "drizzle-orm";
 import { LeagueHeader } from "@/components/league-header";
+import { RacePicker } from "@/components/race-picker";
 import { getLeague } from "@/lib/league";
 import { appUrl } from "@/lib/mail";
 import { getDb } from "@/db";
@@ -65,19 +65,10 @@ export default async function PointsPage({ searchParams }: { searchParams: Promi
     <div className="grid gap-3">
       {header}
       <section className="flex flex-wrap items-center gap-2">
-        <nav className="flex flex-wrap gap-1" aria-label="Race">
-          {list.map((r) => (
-            <Link
-              key={r.id}
-              href={`/points?season=${season!.id}&race=${r.id}`}
-              className={`rounded border px-2 py-0.5 text-sm font-semibold ${
-                r.id === chosen.id ? "border-navy bg-navy text-white" : "border-line bg-card text-muted"
-              }`}
-            >
-              {r.label}
-            </Link>
-          ))}
-        </nav>
+        <RacePicker
+          races={[...list].reverse().map((r) => ({ ...r, href: `/points?season=${season!.id}&race=${r.id}` }))}
+          currentId={chosen.id}
+        />
         <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase ${BADGE[chosen.results] ?? ""}`}>
           {chosen.results}
         </span>
