@@ -74,3 +74,15 @@ describe("job failure alert", () => {
     expect(await alertCommissioners(db, "still broken", new Date(t.getTime() + 13 * 3600_000))).toBe(1);
   });
 });
+
+describe("reminder wording", () => {
+  it("covers no team, empty slots, over budget and complete", async () => {
+    const { statusLines } = await import("@/lib/notify");
+    const base = { saved: true, empty: [], price: 98.56, penalty: 0, budget: 100 };
+    expect(statusLines({ ...base, saved: false, empty: ["D1 (×2)", "D2", "D3", "D4", "D5", "C"] })[0]).toMatch(/random team/);
+    expect(statusLines({ ...base, empty: ["D3", "C"] })[0]).toMatch(/2 empty slots \(D3, C\).*filled automatically/);
+    expect(statusLines({ ...base, price: 101.3, penalty: -20 })[0]).toMatch(/1\.30 over the 100 budget: that's −20 points/);
+    expect(statusLines(base)[0]).toMatch(/complete \(98\.56 \/ 100\)/);
+    expect(statusLines({ ...base, empty: ["D5"], price: 100.4, penalty: -10 })).toHaveLength(2);
+  });
+});

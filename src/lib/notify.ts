@@ -3,11 +3,13 @@
 // Each email goes out once per player per race (the reminders table remembers it).
 import { and, desc, eq, gt, isNotNull, sql } from "drizzle-orm";
 import type { Db } from "@/db";
-import { activityLog, leagues, picks, players, races, reminders, users } from "@/db/schema";
+import { activityLog, leagues, players, races, reminders, seasons, users } from "@/db/schema";
 import { loadLeague } from "@/lib/league-data";
 import { logActivity } from "@/lib/league";
 import { appUrl, escapeHtml, sendMail } from "@/lib/mail";
+import { budgetPenalty, emptySlots, teamPrice, type Slot } from "@/lib/lineup";
 import { standings, teamScore } from "@/lib/standings";
+import { myPicks, rowToPicks, teamAssets, type Race } from "@/lib/team";
 
 const DAY = 24 * 3600_000;
 
@@ -81,25 +83,79 @@ export function canEmail() {
   return !!process.env.EMAIL_SERVER || (process.env.DATABASE_URL ?? "").startsWith("pglite:");
 }
 
+export type TeamStatus = {
+  /** Slots still empty (labels like "D3", "C"); all six when no team is saved. */
+  empty: string[];
+  saved: boolean;
+  price: number;
+  /** Points lost to the budget rule (0 or negative). */
+  penalty: number;
+  budget: number;
+};
+
+const SLOT_LABEL: Record<Slot, string> = { double: "D1 (×2)", d1: "D2", d2: "D3", d3: "D4", d4: "D5", team: "C" };
+
+/** Where a player's team stands for a race: what's missing and what the budget rule would cost. */
+export async function teamStatus(db: Db, playerId: number, race: Race): Promise<TeamStatus> {
+  const row = await myPicks(db, playerId, race.id);
+  const picks = rowToPicks(row);
+  const byId = new Map((await teamAssets(db, race)).map((a) => [a.id, a]));
+  const price = teamPrice(picks, byId);
+  const [s] = await db.select({ budget: seasons.budget }).from(seasons).where(eq(seasons.id, race.seasonId));
+  const budget = Number(s?.budget ?? 100);
+  return {
+    saved: !!row,
+    empty: emptySlots(picks).map((x) => SLOT_LABEL[x]),
+    price,
+    penalty: budgetPenalty(price, budget),
+    budget,
+  };
+}
+
+/** The sentence(s) about the player's team in the reminder. */
+export function statusLines(t: TeamStatus): string[] {
+  if (!t.saved || t.empty.length === 6) {
+    return ["You haven't saved a team yet. If you don't save one before the deadline, you'll get a random team."];
+  }
+  const out: string[] = [];
+  if (t.empty.length) {
+    const n = t.empty.length;
+    out.push(
+      `Your team has ${n} empty slot${n > 1 ? "s" : ""} (${t.empty.join(", ")}). ` +
+        `If you leave ${n > 1 ? "them" : "it"} empty, ${n > 1 ? "they'll" : "it'll"} be filled automatically at the deadline with the best picks your budget allows.`,
+    );
+  }
+  if (t.penalty < 0) {
+    const over = (t.price - t.budget).toFixed(2);
+    out.push(
+      `Your team costs ${t.price.toFixed(2)}, ${over} over the ${t.budget} budget: that's −${Math.abs(t.penalty)} points this race. Swap in someone cheaper to avoid it.`,
+    );
+  }
+  if (!out.length) {
+    out.push(`Your team is complete (${t.price.toFixed(2)} / ${t.budget}). You can still change it until the deadline.`);
+  }
+  return out;
+}
+
 /** The reminder email itself (also used by Admin's "send me a sample"). */
 export function reminderEmail(
   name: string,
   race: { label: string; name: string },
   deadline: Date,
-  saved: boolean,
+  status: TeamStatus,
   now = new Date(),
 ) {
   const hours = Math.max(1, Math.round((deadline.getTime() - now.getTime()) / 3600_000));
   const url = `${appUrl()}/team`;
-  const status = saved
-    ? "Your team is saved; you can still change it until the deadline."
-    : "You haven't saved a team yet. If you don't, you'll get a random one.";
+  const lines = statusLines(status);
+  const action = !status.saved || status.empty.length || status.penalty < 0 ? "Fix my team" : "Open My team";
   return {
     subject: `${race.label}: teams lock in ${hours} h`,
-    text: `Hi ${name},\n\n${race.name} teams lock ${etTime(deadline)} (in about ${hours} hours).\n${status}\n\n${url}\n`,
+    text: `Hi ${name},\n\n${race.name} teams lock ${etTime(deadline)} (in about ${hours} hours).\n${lines.join("\n")}\n\n${url}\n`,
     html:
       `<p>Hi ${escapeHtml(name)},</p><p><b>${escapeHtml(race.name)}</b> teams lock <b>${etTime(deadline)}</b> (in about ${hours} hours).</p>` +
-      `<p>${status}</p><p><a href="${url}">Open My team</a></p>`,
+      lines.map((l) => `<p>${escapeHtml(l)}</p>`).join("") +
+      `<p><a href="${url}">${action}</a></p>`,
   };
 }
 
@@ -118,13 +174,9 @@ export async function sendDeadlineReminders(db: Db, now = new Date()) {
   let sent = 0;
   for (const r of await recipients(db)) {
     if (await alreadySent(db, r.playerId, race.id, "24h")) continue;
-    const [saved] = await db
-      .select({ id: picks.id })
-      .from(picks)
-      .where(and(eq(picks.playerId, r.playerId), eq(picks.raceId, race.id)))
-      .limit(1);
+    const status = await teamStatus(db, r.playerId, race);
     if (!(await claim(db, r.playerId, race.id, "24h"))) continue;
-    const mail = reminderEmail(r.name, race, deadline, !!saved, now);
+    const mail = reminderEmail(r.name, race, deadline, status, now);
     await deliver(db, r.playerId, race.id, "24h", () => sendMail(r.email, mail.subject, mail.text, mail.html));
     sent++;
   }

@@ -5,10 +5,10 @@ import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import type { ActionResult } from "@/components/action-form";
 import * as league from "@/lib/league";
-import { and, eq } from "drizzle-orm";
-import { picks } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { races } from "@/db/schema";
 import { sendInviteEmail, sendMail } from "@/lib/mail";
-import { reminderEmail } from "@/lib/notify";
+import { reminderEmail, teamStatus } from "@/lib/notify";
 import { upcomingRace } from "@/lib/races";
 import { requireViewer } from "@/lib/session";
 
@@ -147,12 +147,14 @@ export async function sampleReminder(): Promise<ActionResult> {
   const db = getDb();
   const race = await upcomingRace(db);
   if (!race?.deadline) return { error: "No upcoming race with a deadline yet." };
-  const [saved] = await db
-    .select({ id: picks.id })
-    .from(picks)
-    .where(and(eq(picks.playerId, player.id), eq(picks.raceId, race.id)))
-    .limit(1);
-  const mail = reminderEmail(player.displayName, race, race.deadline, !!saved, new Date(race.deadline.getTime() - 24 * 3600_000));
+  const [full] = await db.select().from(races).where(eq(races.id, race.id));
+  const mail = reminderEmail(
+    player.displayName,
+    race,
+    race.deadline,
+    await teamStatus(db, player.id, full),
+    new Date(race.deadline.getTime() - 24 * 3600_000),
+  );
   try {
     await sendMail(v.email, mail.subject, mail.text, mail.html);
     return { ok: `Sample reminder sent to ${v.email}.` };
