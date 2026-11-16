@@ -17,7 +17,9 @@ emailed link) · a scheduled GitHub Actions job (from phase 3).
 3. **Scheduled job + Points** (done): f1fantasytools sync every 15 minutes,
    lock with auto-fill and random teams, next-race pricing, Points page,
    Admin race control and price import.
-4. League + Admin race control.
+4. **League** (done): race view with picks as chips (hidden until the
+   deadline), season standings with tie-breaks, colour grid, count-from,
+   season graph with compare-with, league code with Copy link, season chip.
 5. History import, past seasons (season chip on League), replay test
    against the sheet.
 6. Reminder and post-race emails.
