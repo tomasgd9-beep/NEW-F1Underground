@@ -103,9 +103,10 @@ export function SeasonGraph({
           </button>
         </div>
 
+        <div className="md:flex md:items-start">
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          className="w-full cursor-crosshair select-none"
+          className="w-full min-w-0 cursor-crosshair select-none md:flex-1"
           // Mouse: hover. Touch: touch and drag sideways (vertical swipes still scroll).
           style={{ touchAction: "pan-y" }}
           onPointerLeave={(e) => e.pointerType === "mouse" && setHover(null)}
@@ -137,30 +138,46 @@ export function SeasonGraph({
           ))}
         </svg>
 
-        {hover == null && (
-          <p className="mx-3 mb-2 rounded border border-dashed border-line p-2 text-xs text-muted">
-            <span className="hidden md:inline">Hover over</span>
-            <span className="md:hidden">Touch and drag across</span> the graph to see each race.
-          </p>
-        )}
-        {hover != null && (
-          <div className="mx-3 mb-2 rounded border border-line p-2 text-xs">
-            <b>{raceLabels[hover]}</b>
-            <div className="mt-1 grid grid-cols-2 gap-x-4 sm:grid-cols-4">
-              {[...series]
-                .sort((a, b) => (metric === "rank" ? a.values[hover] - b.values[hover] : b.values[hover] - a.values[hover]))
-                .map((s) => (
-                  <span key={s.id} className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full" style={{ background: colour(s.id) }} />
-                    {s.name}
-                    <b className="ml-auto">{s.values[hover] > 0 && compare && metric !== "rank" ? `+${s.values[hover]}` : s.values[hover]}</b>
+        {/* Standings at the hovered race (or the latest one), sorted like the lines: top of the chart first. */}
+        {(() => {
+          const at = hover ?? n - 1;
+          if (at < 0) return null;
+          const val = (v: number) => (v > 0 && compare && metric !== "rank" ? `+${v}` : v);
+          return (
+            <div className="mx-3 mb-2 rounded border border-line p-2 text-xs md:mx-0 md:mt-3 md:mr-3 md:mb-3 md:w-52 md:shrink-0">
+              <div className="flex items-baseline gap-1">
+                <b>{raceLabels[at]}</b>
+                {hover == null && (
+                  <span className="text-muted">
+                    · <span className="hidden md:inline">hover</span>
+                    <span className="md:hidden">touch and drag</span> for other races
                   </span>
-                ))}
+                )}
+              </div>
+              {/* Phones: two columns read down (left column first), so the order still follows the chart. */}
+              <div
+                className="mt-1 grid grid-flow-col grid-cols-2 gap-x-4 gap-y-0.5 md:grid-flow-row md:grid-cols-1 md:![grid-template-rows:none]"
+                style={{ gridTemplateRows: `repeat(${Math.ceil(series.length / 2)}, auto)` }}
+              >
+                {[...series]
+                  .sort((a, b) => (metric === "rank" ? a.values[at] - b.values[at] : b.values[at] - a.values[at]))
+                  .map((s) => (
+                    <span key={s.id} className={`flex items-center gap-1 ${s.id === meId ? "font-semibold" : ""}`}>
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: colour(s.id) }} />
+                      <span className="truncate">{s.name}</span>
+                      <b className="ml-auto tabular-nums">{val(s.values[at])}</b>
+                    </span>
+                  ))}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
+        </div>
 
-        <div className="flex flex-wrap gap-1 border-t border-line px-3 py-2">
+        <div className="flex flex-wrap items-center gap-1 border-t border-line px-3 py-2">
+          <span className="mr-1 text-xs font-semibold text-muted" title="Tap a name to hide or show its line">
+            Filter
+          </span>
           {players.map((p) => {
             const on = shown.has(p.id);
             return (
