@@ -25,7 +25,8 @@ export function LeagueHeader({
   const current = seasons.find((s) => s.id === seasonId);
   return (
     <div className="flex items-center gap-1.5 sm:gap-2">
-      <h1 className="truncate text-base font-bold sm:text-lg">{leagueName}</h1>
+      {/* The league's name is already in the top bar (only one league for now); keep it for screen readers. */}
+      <h1 className="sr-only">{leagueName}</h1>
       {current && (
         <details className="relative shrink-0">
           <summary className="cursor-pointer list-none rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold whitespace-nowrap sm:px-2.5 sm:text-sm">

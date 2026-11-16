@@ -442,6 +442,8 @@ function SeasonView({
 }) {
   const [from, setFrom] = useState<number>(scoredRaces[0]?.id ?? 0);
   const [graph, setGraph] = useState(false);
+  // Race table sort: a race column (index into `races`), or null for the standings order.
+  const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
   const races = scoredRaces.slice(Math.max(0, scoredRaces.findIndex((r) => r.id === from)));
   const raceIds = races.map((r) => r.id);
   const rows: StandingRow[] = useMemo(() => standings(playerIds, raceIds, scoreOf), [from]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -449,6 +451,12 @@ function SeasonView({
   if (!scoredRaces.length) {
     return <section className="rounded-lg border border-line bg-card p-4 text-sm text-muted">No scored races yet.</section>;
   }
+  const raceRows =
+    sort == null
+      ? rows
+      : [...rows].sort((a, b) => sort.dir * ((b.perRace[sort.col] ?? -1e9) - (a.perRace[sort.col] ?? -1e9)) || a.rank - b.rank);
+  const sortBy = (col: number) =>
+    setSort((cur) => (cur?.col === col ? (cur.dir === 1 ? { col, dir: -1 } : null) : { col, dir: 1 }));
   const range = raceIds.map((rid) => {
     const vals = rows.map((r) => r.perRace[raceIds.indexOf(rid)]).filter((v): v is number => v != null);
     return { min: Math.min(...vals), max: Math.max(...vals) };
@@ -485,10 +493,10 @@ function SeasonView({
           <thead className="text-xs text-muted">
             <tr>
               <th className="py-1 pl-3 text-left font-semibold">#</th>
-              <th className="px-2 text-left font-semibold">Player</th>
-              <th className="px-2 text-right font-semibold">Total</th>
-              <th className="hidden px-2 text-right font-semibold sm:table-cell">Gap ↑</th>
-              <th className="px-2 text-right font-semibold">Gap 1st</th>
+              <th className="px-1.5 text-left font-semibold sm:px-2">Player</th>
+              <th className="px-1.5 text-right font-semibold sm:px-2">Total</th>
+              <th className="px-1.5 text-right font-semibold sm:px-2" title="Points behind the player above">Gap</th>
+              <th className="px-1.5 text-right font-semibold whitespace-nowrap sm:px-2">Gap 1st</th>
               <th className="hidden px-2 text-right font-semibold sm:table-cell">Last race</th>
               <th className="pr-3 text-right font-semibold">±</th>
             </tr>
@@ -497,10 +505,10 @@ function SeasonView({
             {rows.map((r) => (
               <tr key={r.playerId} className={`border-t border-line ${r.playerId === data.meId ? "bg-red/5 font-semibold" : ""}`}>
                 <td className="py-1.5 pl-3 font-bold text-muted">{r.rank}</td>
-                <td className="px-2">{name(r.playerId)}</td>
-                <td className={`px-2 text-right font-bold ${neg(r.total)}`}>{f(r.total)}</td>
-                <td className="hidden px-2 text-right text-muted sm:table-cell">{r.gapAbove == null ? "" : `−${f(r.gapAbove)}`}</td>
-                <td className="px-2 text-right text-muted">{r.gapLeader == null ? "" : `−${f(r.gapLeader)}`}</td>
+                <td className="max-w-[9rem] truncate px-1.5 sm:max-w-none sm:px-2">{name(r.playerId)}</td>
+                <td className={`px-1.5 text-right font-bold sm:px-2 ${neg(r.total)}`}>{f(r.total)}</td>
+                <td className="px-1.5 text-right font-semibold sm:px-2">{r.gapAbove == null ? "" : r.gapAbove === 0 ? "0" : `−${f(r.gapAbove)}`}</td>
+                <td className="px-1.5 text-right text-muted sm:px-2">{r.gapLeader == null ? "" : r.gapLeader === 0 ? "0" : `−${f(r.gapLeader)}`}</td>
                 <td className={`hidden px-2 text-right sm:table-cell ${neg(r.lastRace)}`}>{f(r.lastRace)}</td>
                 <td className="pr-3 text-right text-xs">
                   <Move m={r.move} />
@@ -515,16 +523,28 @@ function SeasonView({
         <table className="text-sm">
           <thead className="text-xs text-muted">
             <tr>
-              <th className="sticky left-0 bg-card py-1 pl-3 pr-2 text-left font-semibold">Player</th>
-              {races.map((r) => (
-                <th key={r.id} className="px-2 text-right font-semibold whitespace-nowrap">
-                  {r.label}
+              <th className="sticky left-0 bg-card py-1 pl-3 pr-2 text-left font-semibold">
+                <button type="button" onClick={() => setSort(null)} className={sort == null ? "text-ink underline" : ""}>
+                  Player
+                </button>
+              </th>
+              {races.map((r, i) => (
+                <th key={r.id} className="px-1 text-right font-semibold whitespace-nowrap">
+                  <button
+                    type="button"
+                    onClick={() => sortBy(i)}
+                    className={`rounded px-1 py-0.5 ${sort?.col === i ? "bg-navy text-white" : "hover:text-ink"}`}
+                    title={`Sort by ${r.label}`}
+                  >
+                    {r.label}
+                    {sort?.col === i && (sort.dir === 1 ? " ↓" : " ↑")}
+                  </button>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {raceRows.map((r) => (
               <tr key={r.playerId} className={`border-t border-line ${r.playerId === data.meId ? "font-semibold" : ""}`}>
                 <td className="sticky left-0 bg-card py-1 pl-3 pr-2 whitespace-nowrap">{name(r.playerId)}</td>
                 {races.map((race, i) => {
