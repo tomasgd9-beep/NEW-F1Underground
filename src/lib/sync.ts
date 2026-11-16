@@ -10,6 +10,7 @@ import {
   people,
   picks,
   players,
+  pricePeers,
   races,
   seasons,
   stints,
@@ -361,23 +362,19 @@ async function fillAndFreeze(
  * Once a race is final, price the next race of the season with the league
  * formula, unless it already has prices (e.g. imported or set by hand).
  */
-export async function priceNextRace(db: Db, finished: Race): Promise<{ race: string; priced: number } | null> {
-  const [next] = await db
-    .select()
-    .from(races)
-    .where(and(eq(races.seasonId, finished.seasonId), gt(races.round, finished.round), ne(races.status, "cancelled")))
-    .orderBy(asc(races.round))
-    .limit(1);
-  if (!next) return null;
-  const [{ n: existing }] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(assetPrices)
-    .where(eq(assetPrices.raceId, next.id));
-  if (existing > 0) return null;
+type PriceRow = {
+  personId: number | null;
+  constructorId: number | null;
+  lastSeasonPrice: number;
+  last3: number;
+  racesCounted: number;
+  formula: number;
+};
 
+/** Each asset's formula price for the race after `finished` (before the floor), from that season's points. */
+async function pricesAfter(db: Db, finished: Race): Promise<PriceRow[]> {
   const base = await db.select().from(assetPrices).where(eq(assetPrices.raceId, finished.id));
-  if (!base.length) return null;
-
+  if (!base.length) return [];
   // Scored races of the season up to the finished one, newest first.
   const scored = await db
     .select({ id: races.id })
@@ -405,30 +402,162 @@ export async function priceNextRace(db: Db, finished: Race): Promise<{ race: str
         .leftJoin(stints, eq(stints.id, assetPoints.stintId))
         .where(inArray(assetPoints.raceId, scoredIds))
     : [];
-
   const stat = (key: "personId" | "constructorId", id: number) => {
     const mine = pts.filter((p) => p[key] === id && p.total != null);
     const racedIn = new Set(mine.map((p) => p.raceId));
     const last3 = mine.filter((p) => last3Ids.includes(p.raceId)).reduce((s, p) => s + num(p.total), 0);
     return { races: Math.min(3, racedIn.size), last3 };
   };
-
-  const rows = base.map((b) => {
-    const s = b.personId ? stat("personId", b.personId) : stat("constructorId", b.constructorId!);
+  return base.map((b) => {
+    const st = b.personId ? stat("personId", b.personId) : stat("constructorId", b.constructorId!);
     const lsp = num(b.lastSeasonPrice ?? b.finalPrice);
     return {
-      raceId: next.id,
       personId: b.personId,
       constructorId: b.constructorId,
-      lastSeasonPrice: String(lsp),
-      last3: String(s.last3),
-      racesCounted: s.races,
-      formulaPrice: String(round2(formulaPrice(lsp, s.last3, s.races))),
+      lastSeasonPrice: lsp,
+      last3: st.last3,
+      racesCounted: st.races,
+      formula: round2(formulaPrice(lsp, st.last3, st.races)),
     };
   });
-  const floored = applyFloor(rows.map((r) => num(r.formulaPrice)));
-  await db.insert(assetPrices).values(rows.map((r, i) => ({ ...r, finalPrice: String(round2(floored[i])) })));
-  return { race: next.label, priced: rows.length };
+}
+
+/**
+ * Drivers and teams racing now who have no price yet (a rookie or a substitute): they start
+ * at their price peer's price if a commissioner set one, otherwise at the cheapest price.
+ */
+async function newcomers(db: Db, seasonId: number, priced: PriceRow[], floor: number): Promise<PriceRow[]> {
+  const havePerson = new Set(priced.map((r) => r.personId).filter(Boolean));
+  const haveCons = new Set(priced.map((r) => r.constructorId).filter(Boolean));
+  const active = await db.select({ personId: stints.personId }).from(stints).where(eq(stints.active, true));
+  const cons = await db.select({ id: constructors.id }).from(constructors).where(eq(constructors.active, true));
+  const peers = await db.select().from(pricePeers).where(eq(pricePeers.seasonId, seasonId));
+  const priceOfPerson = (id: number) => priced.find((r) => r.personId === id)?.formula;
+  const out: PriceRow[] = [];
+  for (const id of new Set(active.map((a) => a.personId))) {
+    if (havePerson.has(id)) continue;
+    const peer = peers.find((p) => p.personId === id);
+    const start = (peer && priceOfPerson(peer.peerPersonId)) ?? floor;
+    out.push({ personId: id, constructorId: null, lastSeasonPrice: start, last3: 0, racesCounted: 0, formula: start });
+  }
+  for (const c of cons) {
+    if (haveCons.has(c.id)) continue;
+    out.push({ personId: null, constructorId: c.id, lastSeasonPrice: floor, last3: 0, racesCounted: 0, formula: floor });
+  }
+  return out;
+}
+
+/** Which rows are still racing (a person with an active stint, an active constructor). */
+async function activeFlags(db: Db, rows: PriceRow[]): Promise<boolean[]> {
+  const persons = new Set(
+    (await db.select({ id: stints.personId }).from(stints).where(eq(stints.active, true))).map((r) => r.id),
+  );
+  const cons = new Set(
+    (await db.select({ id: constructors.id }).from(constructors).where(eq(constructors.active, true))).map((r) => r.id),
+  );
+  return rows.map((r) => (r.personId ? persons.has(r.personId) : cons.has(r.constructorId!)));
+}
+
+async function writePrices(db: Db, race: Race, rows: PriceRow[]) {
+  const floored = applyFloor(
+    rows.map((r) => r.formula),
+    await activeFlags(db, rows),
+  );
+  await db.insert(assetPrices).values(
+    rows.map((r, i) => ({
+      raceId: race.id,
+      personId: r.personId,
+      constructorId: r.constructorId,
+      lastSeasonPrice: String(r.lastSeasonPrice),
+      last3: String(r.last3),
+      racesCounted: r.racesCounted,
+      formulaPrice: String(r.formula),
+      finalPrice: String(round2(floored[i])),
+    })),
+  );
+}
+
+const cheapest = async (db: Db, rows: PriceRow[]) => {
+  const act = await activeFlags(db, rows);
+  const floored = applyFloor(
+    rows.map((r) => r.formula),
+    act,
+  );
+  return round2(Math.min(...floored.filter((x, i) => x > 1 && act[i])));
+};
+
+export async function priceNextRace(db: Db, finished: Race): Promise<{ race: string; priced: number } | null> {
+  const [next] = await db
+    .select()
+    .from(races)
+    .where(and(eq(races.seasonId, finished.seasonId), gt(races.round, finished.round), ne(races.status, "cancelled")))
+    .orderBy(asc(races.round))
+    .limit(1);
+  if (!next) return null;
+  const [{ n: existing }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(assetPrices)
+    .where(eq(assetPrices.raceId, next.id));
+  if (existing > 0) return null;
+  const rows = await pricesAfter(db, finished);
+  if (!rows.length) return null;
+  const all = [...rows, ...(await newcomers(db, next.seasonId, rows, await cheapest(db, rows)))];
+  await writePrices(db, next, all);
+  return { race: next.label, priced: all.length };
+}
+
+/**
+ * Opening prices for a new season's first race. Each driver's and team's "last season price"
+ * is the price the formula gives after the previous season's last race (the price they'd have
+ * had for one more race); the first race uses it as is, as the sheet did. Newcomers start at
+ * their price peer's price, or the cheapest price.
+ */
+export async function priceSeasonOpener(db: Db, seasonId: number): Promise<{ race: string; priced: number } | null> {
+  const [season] = await db.select().from(seasons).where(eq(seasons.id, seasonId));
+  const [first] = await db
+    .select()
+    .from(races)
+    .where(and(eq(races.seasonId, seasonId), ne(races.status, "cancelled")))
+    .orderBy(asc(races.round))
+    .limit(1);
+  if (!season || !first) return null;
+  const [{ n: existing }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(assetPrices)
+    .where(eq(assetPrices.raceId, first.id));
+  if (existing > 0) return null;
+  const [prev] = await db
+    .select()
+    .from(seasons)
+    .where(sql`${seasons.year} < ${season.year}`)
+    .orderBy(desc(seasons.year))
+    .limit(1);
+  if (!prev) return null;
+  const [lastRace] = await db
+    .select()
+    .from(races)
+    .where(and(eq(races.seasonId, prev.id), eq(races.results, "final"), ne(races.status, "cancelled")))
+    .orderBy(desc(races.round))
+    .limit(1);
+  if (!lastRace) return null;
+  const after = await pricesAfter(db, lastRace);
+  if (!after.length) return null;
+  // Season-end price (after the floor) becomes this season's last-season price.
+  const ended = applyFloor(
+    after.map((r) => r.formula),
+    await activeFlags(db, after),
+  ).map(round2);
+  const rows: PriceRow[] = after.map((r, i) => ({
+    personId: r.personId,
+    constructorId: r.constructorId,
+    lastSeasonPrice: ended[i],
+    last3: 0,
+    racesCounted: 0,
+    formula: ended[i],
+  }));
+  const all = [...rows, ...(await newcomers(db, seasonId, rows, await cheapest(db, rows)))];
+  await writePrices(db, first, all);
+  return { race: first.label, priced: all.length };
 }
 
 /* ───────────────────────────── One run ───────────────────────────── */
@@ -455,6 +584,9 @@ export async function runJob(
 
   const [finished] = await db.select().from(races).where(eq(races.fftId, live.race.id)).limit(1);
   if (finished?.results === "final") out.prices = await priceNextRace(db, finished);
+  // A new season's first race has no race before it in its season: price it from last season.
+  const open = await currentRace(db);
+  if (!out.prices && open && !open.lockedAt) out.prices = (await priceSeasonOpener(db, open.seasonId)) ?? undefined;
   return out;
 }
 

@@ -112,7 +112,11 @@ describe("prices", () => {
     const [bra] = await db.select().from(s.races).where(eq(s.races.fftId, "2026_20"));
     await importPrices(db, bra, PRICES);
     const res = await priceNextRace(db, bra);
-    expect(res).toEqual({ race: "R21 VEG", priced: 11 });
+    // 11 priced from Brazil, plus 1 active asset with no price yet, which starts at the floor.
+    expect(res).toEqual({ race: "R21 VEG", priced: 12 });
+    const vegasId = (await db.select().from(s.races).where(eq(s.races.fftId, "2026_21")))[0].id;
+    const vegasAssets = await teamAssets(db, (await db.select().from(s.races).where(eq(s.races.id, vegasId)))[0]);
+    expect(vegasAssets.every((a) => a.price != null && a.price > 1)).toBe(true);
     const [ver] = await db.select().from(s.people).where(eq(s.people.ticker, "VER"));
     const [row] = await db.select().from(s.assetPrices).where(eq(s.assetPrices.personId, ver.id));
     // races = 1 (Brazil), Last 3 = 65: 0.34·65/1.089 + 0.66·28.8
