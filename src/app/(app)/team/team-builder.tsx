@@ -390,7 +390,7 @@ export function TeamBuilder({
               <span role="columnheader">{tab === "driver" ? "Driver" : "Constructor"}</span>
               <span role="columnheader" className="text-right">Season</span>
               <span role="columnheader" className="text-right leading-tight">Last 3 races</span>
-              <span role="columnheader" className="text-right">Price</span>
+              <span role="columnheader" className="pr-[2.85rem] text-right">Price</span>
               <span role="columnheader" aria-label="Add or remove" />
             </div>
             {tab === "driver" ? (
@@ -471,12 +471,17 @@ function Group({
             </span>
             <span role="cell" className="text-right whitespace-nowrap tabular-nums">
               {fmt(a.price)}
-              {a.move != null && a.move !== 0 && (
-                <span className={`ml-1 text-[11px] ${a.move > 0 ? "text-up" : "text-down"}`}>
-                  {a.move > 0 ? "▲" : "▼"}
-                  {Math.abs(a.move).toFixed(2)}
-                </span>
-              )}
+              {/* The change always gets its own slot, so prices line up even when there's no change. */}
+              <span
+                className={`ml-1 inline-block w-[2.6rem] text-left text-[11px] ${(a.move ?? 0) > 0 ? "text-up" : "text-down"}`}
+              >
+                {a.move != null && a.move !== 0 && (
+                  <>
+                    {a.move > 0 ? "▲" : "▼"}
+                    {Math.abs(a.move).toFixed(2)}
+                  </>
+                )}
+              </span>
             </span>
             <span role="cell">
               <button
