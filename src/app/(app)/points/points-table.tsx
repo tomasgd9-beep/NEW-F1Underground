@@ -108,7 +108,7 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
       <div className="overflow-x-auto">
         <table className="w-full text-sm tabular-nums">
           <thead className="text-xs text-muted">
-            <tr className="hidden md:table-row">
+            <tr className={locked ? "" : "hidden md:table-row"}>
               <th />
               {groups.map((g, gi) => (
                 <th
@@ -119,7 +119,17 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
                   {g.name}
                 </th>
               ))}
-              <th colSpan={3 + (locked ? (isDriver ? 2 : 1) : 0)} />
+              <th />
+              <th className={STAT} />
+              <th className={STAT} />
+              {locked && (
+                <th
+                  colSpan={isDriver ? 2 : 1}
+                  className="border-b border-line pt-1 pr-3 pl-2 text-center font-semibold whitespace-nowrap uppercase tracking-wide"
+                >
+                  Picked by
+                </th>
+              )}
             </tr>
             <tr>
               <th className="py-1 pl-3 text-left font-semibold">{sortBtn("ticker", isDriver ? "Driver" : "Constructor")}</th>
@@ -135,9 +145,9 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
               )}
               <th className="px-2 text-right font-semibold">{sortBtn("total", "Total")}</th>
               <th className={`${STAT} px-2 text-right font-semibold`}>{sortBtn("season", "Season")}</th>
-              <th className={`${STAT} px-2 text-right font-semibold`}>{sortBtn("last3", "Last 3")}</th>
+              <th className={`${STAT} px-2 text-right font-semibold`}>{sortBtn("last3", "Last 3 races")}</th>
               {locked && isDriver && <th className="px-2 text-right font-semibold">{sortBtn("doubled", "×2")}</th>}
-              {locked && <th className="pr-3 text-right font-semibold">{sortBtn("picked", isDriver ? "×1" : "Picked")}</th>}
+              {locked && <th className="pr-3 text-right font-semibold">{sortBtn("picked", isDriver ? "×1" : "Teams")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -204,8 +214,12 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
       <p className="border-t border-line px-3 py-1.5 text-[11px] text-muted">
         <span className="md:hidden">Tap a row for the session breakdown and who picked it. </span>
         <span className="hidden md:inline">Click a row to see who picked it. </span>
-        Season and Last 3 are as of now.
-        {!locked && " Picks are shown after the deadline."}
+        Season and Last 3 races: points scored so far this season.
+        {locked
+          ? isDriver
+            ? " Picked by ×2 / ×1: how many players have them in their team this race, as their ×2 driver or as a regular pick."
+            : " Picked by: how many players have them in their team this race."
+          : " Who picked what is shown after the deadline."}
       </p>
     </section>
   );

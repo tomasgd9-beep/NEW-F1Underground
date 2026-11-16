@@ -377,7 +377,7 @@ export function TeamBuilder({
             >
               <option value="price">Price</option>
               <option value="season">Season</option>
-              <option value="last3">Last 3</option>
+              <option value="last3">Last 3 races</option>
               <option value="name">Name</option>
             </select>
           </div>
@@ -387,7 +387,7 @@ export function TeamBuilder({
               <tr>
                 <th className="py-1 pl-3 text-left font-semibold">{tab === "driver" ? "Driver" : "Constructor"}</th>
                 <th className="px-2 text-right font-semibold">Season</th>
-                <th className="px-2 text-right font-semibold">Last 3</th>
+                <th className="px-2 text-right font-semibold leading-tight">Last 3 races</th>
                 <th className="pr-2 text-right font-semibold">Price</th>
                 <th className="w-10 pr-2" aria-label="Add or remove" />
               </tr>
@@ -407,6 +407,9 @@ export function TeamBuilder({
             )}
           </table>
           {list.length === 0 && <p className="px-3 py-3 text-sm text-muted">Nothing matches “{query}”.</p>}
+          <p className="border-t border-line px-3 py-1.5 text-[11px] text-muted">
+            Season and Last 3 races: points scored so far this season. Price ▲▼: change since the last race.
+          </p>
         </section>
       )}
       {!locked && <div aria-hidden className="h-12 lg:hidden" />}
