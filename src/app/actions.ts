@@ -257,3 +257,57 @@ export async function renameRace(_: ActionResult, f: FormData): Promise<ActionRe
     return `Renamed to ${label}.`;
   });
 }
+
+/* ───────────── Corrections (commissioners) ───────────── */
+
+export async function updateRaceAction(_: ActionResult, f: FormData): Promise<ActionResult> {
+  return attempt(async () => {
+    const v = await commissionerOrError();
+    const { updateRace, torontoToUtc } = await import("@/lib/corrections");
+    const status = str(f, "status") as "scheduled" | "delayed" | "cancelled" | "relocated";
+    // A changed time always wins over the "follow f1fantasytools" tick.
+    const typed = str(f, "deadline");
+    const changed = typed !== "" && typed !== str(f, "was");
+    const deadline = f.get("auto") && !changed ? ("auto" as const) : torontoToUtc(typed);
+    await updateRace(getDb(), v.userId, num(f, "raceId"), { status, deadline });
+    return status === "cancelled" ? "Saved. The race is skipped; the next race is open." : "Saved.";
+  });
+}
+
+export async function setPointsAction(_: ActionResult, f: FormData): Promise<ActionResult> {
+  return attempt(async () => {
+    const v = await commissionerOrError();
+    const { setPoints } = await import("@/lib/corrections");
+    const n = (k: string) => {
+      const raw = str(f, k).trim();
+      if (raw === "") return null;
+      const x = Number(raw.replace(",", "."));
+      if (!Number.isFinite(x)) throw new league.LeagueError("Points must be numbers.");
+      return x;
+    };
+    const Q = n("Q"), R = n("R");
+    if (Q == null || R == null) throw new league.LeagueError("Fill in qualifying and race points (0 if none).");
+    await setPoints(getDb(), v.userId, num(f, "raceId"), str(f, "assetId"), { S: n("S"), Q, R });
+    return "Points saved. The job won't overwrite them.";
+  });
+}
+
+export async function clearPointsAction(_: ActionResult, f: FormData): Promise<ActionResult> {
+  return attempt(async () => {
+    const v = await commissionerOrError();
+    const { clearPointsCorrection } = await import("@/lib/corrections");
+    await clearPointsCorrection(getDb(), v.userId, num(f, "raceId"), str(f, "assetId"));
+    return "Correction removed; the next run takes f1fantasytools' numbers again.";
+  });
+}
+
+export async function fixTeamAction(_: ActionResult, f: FormData): Promise<ActionResult> {
+  return attempt(async () => {
+    const v = await commissionerOrError();
+    const { fixTeam } = await import("@/lib/corrections");
+    const { SLOTS } = await import("@/lib/lineup");
+    const team = Object.fromEntries(SLOTS.map((s) => [s, str(f, s) || undefined]));
+    await fixTeam(getDb(), v.userId, num(f, "raceId"), num(f, "playerId"), team);
+    return "Team saved.";
+  });
+}

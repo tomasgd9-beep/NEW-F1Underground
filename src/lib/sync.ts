@@ -57,7 +57,12 @@ async function upsertRace(db: Db, seasonId: number, r: FftRace, withStatus: bool
   if (existing) {
     const [u] = await db
       .update(races)
-      .set({ ...common, ...(existing.deadlineManual || !dl ? {} : { deadline: dl.when }) })
+      .set({
+        ...common,
+        // A race the commissioner cancelled stays cancelled.
+        ...(existing.status === "cancelled" ? { status: "cancelled" as const } : {}),
+        ...(existing.deadlineManual || !dl ? {} : { deadline: dl.when }),
+      })
       .where(eq(races.id, existing.id))
       .returning();
     return u;
@@ -158,14 +163,18 @@ async function writePoints(db: Db, live: FftLive, raceId: number): Promise<numbe
       await db
         .insert(assetPoints)
         .values({ raceId, stintId, ...values })
-        .onConflictDoUpdate({ target: [assetPoints.raceId, assetPoints.stintId], set: values });
+        .onConflictDoUpdate({ target: [assetPoints.raceId, assetPoints.stintId], set: values, setWhere: eq(assetPoints.manual, false) });
     } else {
       const constructorId = consBy.get(a.id);
       if (!constructorId) continue;
       await db
         .insert(assetPoints)
         .values({ raceId, constructorId, ...values })
-        .onConflictDoUpdate({ target: [assetPoints.raceId, assetPoints.constructorId], set: values });
+        .onConflictDoUpdate({
+          target: [assetPoints.raceId, assetPoints.constructorId],
+          set: values,
+          setWhere: eq(assetPoints.manual, false),
+        });
     }
     n++;
   }

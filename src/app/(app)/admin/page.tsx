@@ -10,6 +10,7 @@ import { assetPrices } from "@/db/schema";
 import { appUrl } from "@/lib/mail";
 import { requireMember } from "@/lib/session";
 import * as act from "@/app/actions";
+import { Corrections } from "./corrections";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -28,7 +29,12 @@ function Card({ title, children, note }: { title: string; children: React.ReactN
 
 const chip = "rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide";
 
-export default async function Admin() {
+export default async function Admin({
+  searchParams,
+}: {
+  searchParams: Promise<{ race?: string; asset?: string; player?: string }>;
+}) {
+  const params = await searchParams;
   const v = await requireMember();
   const db = getDb();
   const boss = v.isCommissioner;
@@ -338,6 +344,14 @@ export default async function Admin() {
       </div>
 
       <div className="grid gap-3 content-start">
+        {boss && (
+          <div id="corrections" className="scroll-mt-28">
+            <Card title="Corrections" note="when a race or f1fantasytools doesn't go to plan">
+              <Corrections db={db} leagueId={leagueId} params={params} defaultRaceId={race?.id ?? null} />
+            </Card>
+          </div>
+        )}
+
         <Card title="Invite friends" note="anyone can">
           <p className="text-xs text-muted">League code</p>
           <p className={`text-2xl font-bold tracking-[0.2em] ${league.codeActive ? "" : "text-muted line-through"}`}>

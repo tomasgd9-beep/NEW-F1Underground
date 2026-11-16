@@ -174,6 +174,8 @@ export const assetPoints = pgTable(
     raceTotal: numeric("race_total", { precision: 7, scale: 1 }),
     total: numeric("total", { precision: 7, scale: 1 }),
     isFinal: boolean("is_final").notNull().default(false),
+    /** Set by a commissioner's correction: the sync job no longer overwrites this row. */
+    manual: boolean("manual").notNull().default(false),
     updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

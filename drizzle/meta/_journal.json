@@ -22,6 +22,13 @@
       "when": 1794796633802,
       "tag": "0002_picks_score_adjust",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794866321632,
+      "tag": "0003_manual_points",
+      "breakpoints": true
     }
   ]
 }

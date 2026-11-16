@@ -1,0 +1,1 @@
+ALTER TABLE "asset_points" ADD COLUMN "manual" boolean DEFAULT false NOT NULL;
