@@ -81,7 +81,11 @@ runs on GitHub. It needs the database address:
 2. github.com/tomasgd9-beep/NEW-F1Underground → **Settings → Secrets and
    variables → Actions → New repository secret**. Name `DATABASE_URL`, paste
    the value, **Add secret**.
-3. **Actions** tab → **League job** → **Run workflow** to run it once now.
+3. Add two more secrets the same way, with the same values as on Vercel, so
+   the job can send emails (24-hour deadline reminder, race summary, and an
+   alert to commissioners if the job fails): `EMAIL_SERVER` and `EMAIL_FROM`.
+   Without them the job still runs; it just sends no email.
+4. **Actions** tab → **League job** → **Run workflow** to run it once now.
    After that it runs by itself every 15 minutes.
 
 If a run fails, Admin → Race control shows the error under "Last sync".

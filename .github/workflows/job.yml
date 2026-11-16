@@ -23,3 +23,8 @@ jobs:
       - run: npx tsx scripts/job.ts
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Emails (reminders, race summaries, failure alerts). Same values as on Vercel;
+          # without them the job still runs and simply sends no email.
+          EMAIL_SERVER: ${{ secrets.EMAIL_SERVER }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          APP_URL: https://new-f1-underground.vercel.app
