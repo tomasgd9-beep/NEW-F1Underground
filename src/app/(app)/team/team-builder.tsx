@@ -109,6 +109,7 @@ export function TeamBuilder({
   const issues = lineupIssues(picks, byId, doubleCap);
   const badIds = new Set(issues.map((i) => ("assetId" in i ? i.assetId : "")));
   const dirty = SLOTS.some((s) => (picks[s] ?? null) !== (saved[s] ?? null));
+  const savedEmpty = SLOTS.filter((s) => !saved[s]).map((s) => (s === "double" ? "D1 ×2" : SLOT_LABEL[s]));
   const inTeam = new Set(SLOTS.map((s) => picks[s]).filter(Boolean) as AssetId[]);
   const name = (id: AssetId) => byId.get(id)?.ticker ?? "?";
 
@@ -283,7 +284,7 @@ export function TeamBuilder({
           </ul>
         )}
 
-        <div className="flex items-center gap-2 border-t border-line px-3 py-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line px-3 py-2">
           {origin && origin !== "manual" && !dirty && (
             <span className="rounded bg-black/10 px-1.5 text-[11px] font-semibold uppercase dark:bg-white/10">
               {origin === "random" ? "Random" : "Auto-filled"}
@@ -299,7 +300,7 @@ export function TeamBuilder({
                 : savedAt
                   ? `Saved ${ago(savedAt, now)}`
                   : "Not saved yet"}
-            {!locked && SLOTS.some((s) => !picks[s]) && " · empty slots are auto-filled at the deadline"}
+            {!locked && (dirty || !savedAt) && SLOTS.some((s) => !picks[s]) && " · empty slots are auto-filled at the deadline"}
           </span>
           {!locked && (
             <button
@@ -310,6 +311,23 @@ export function TeamBuilder({
             >
               {pending ? "Saving…" : "Save team"}
             </button>
+          )}
+          {/* What's wrong with the team as saved: shown in red under "Saved …" until it's fixed. */}
+          {!locked && !dirty && savedAt && (savedEmpty.length > 0 || penalty < 0 || issues.length > 0) && (
+            <ul className="basis-full text-xs font-semibold text-down">
+              {savedEmpty.length > 0 && (
+                <li>
+                  Saved with {savedEmpty.length} empty slot{savedEmpty.length > 1 ? "s" : ""} ({savedEmpty.join(", ")}): they&apos;ll
+                  be auto-filled at the deadline unless you fill them.
+                </li>
+              )}
+              {penalty < 0 && (
+                <li>
+                  Saved over budget by {fmt(price - budget)}: that&apos;s −{Math.abs(penalty)} pts this race.
+                </li>
+              )}
+              {issues.length > 0 && <li>Saved team breaks a rule (see above); fix it before the deadline.</li>}
+            </ul>
           )}
         </div>
         </div>
