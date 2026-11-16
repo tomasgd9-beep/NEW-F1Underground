@@ -39,7 +39,7 @@ export function SeasonGraph({
       .map((p) => ({ ...p, values: base(p.id).map((v, i) => v - (ref?.[i] ?? 0)) }));
   }, [metric, compare, shown, players, cumulative, raceTotals, ranks]);
 
-  const W = 760, H = 360, L = 48, R = 40, T = 16, B = 36;
+  const W = 760, H = 340, L = 48, R = 16, T = 16, B = 12;
   const all = series.flatMap((s) => s.values);
   let lo = Math.min(0, ...all), hi = Math.max(0, ...all);
   if (metric === "rank") {
@@ -56,6 +56,14 @@ export function SeasonGraph({
   };
   const ticks =
     metric === "rank" ? [1, Math.ceil(hi / 2), hi] : [...new Set([lo, nice((lo + hi) / 2), hi, ...(lo < 0 && hi > 0 ? [0] : [])])];
+
+  const pick = (e: React.PointerEvent<SVGSVGElement>) => {
+    const b = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - b.left) / b.width) * W;
+    let best = 0;
+    for (let i = 0; i < n; i++) if (Math.abs(X(i) - x) < Math.abs(X(best) - x)) best = i;
+    setHover(best);
+  };
 
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 p-2 md:p-6" onClick={onClose}>
@@ -97,15 +105,12 @@ export function SeasonGraph({
 
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          className="w-full"
-          onMouseLeave={() => setHover(null)}
-          onMouseMove={(e) => {
-            const b = e.currentTarget.getBoundingClientRect();
-            const x = ((e.clientX - b.left) / b.width) * W;
-            let best = 0;
-            for (let i = 0; i < n; i++) if (Math.abs(X(i) - x) < Math.abs(X(best) - x)) best = i;
-            setHover(best);
-          }}
+          className="w-full cursor-crosshair select-none"
+          // Mouse: hover. Touch: touch and drag sideways (vertical swipes still scroll).
+          style={{ touchAction: "pan-y" }}
+          onPointerLeave={(e) => e.pointerType === "mouse" && setHover(null)}
+          onPointerDown={(e) => pick(e)}
+          onPointerMove={(e) => pick(e)}
         >
           {ticks.map((t) => (
             <g key={t}>
@@ -116,18 +121,6 @@ export function SeasonGraph({
             </g>
           ))}
           {metric !== "rank" && <line x1={L} x2={W - R} y1={Y(0)} y2={Y(0)} stroke="var(--muted)" strokeDasharray="3 3" />}
-          {raceLabels.map((l, i) => (
-            <text
-              key={l}
-              x={X(i)}
-              y={H - 12}
-              textAnchor={n > 1 && i === n - 1 ? "end" : n > 1 && i === 0 ? "start" : "middle"}
-              fontSize="11"
-              fill="var(--muted)"
-            >
-              {l}
-            </text>
-          ))}
           {hover != null && <line x1={X(hover)} x2={X(hover)} y1={T} y2={H - B} stroke="var(--muted)" />}
           {series.map((s) => (
             <g key={s.id}>
@@ -144,6 +137,12 @@ export function SeasonGraph({
           ))}
         </svg>
 
+        {hover == null && (
+          <p className="mx-3 mb-2 rounded border border-dashed border-line p-2 text-xs text-muted">
+            <span className="hidden md:inline">Hover over</span>
+            <span className="md:hidden">Touch and drag across</span> the graph to see each race.
+          </p>
+        )}
         {hover != null && (
           <div className="mx-3 mb-2 rounded border border-line p-2 text-xs">
             <b>{raceLabels[hover]}</b>
