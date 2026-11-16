@@ -190,6 +190,33 @@ export default async function Admin() {
                                   <SubmitButton variant="quiet">Delete</SubmitButton>
                                 </ActionForm>
                               )}
+                              {roster.length > 1 && (
+                                <ActionForm
+                                  action={act.mergePlayers}
+                                  confirm={`Merge ${p.name} into the profile you chose? ${p.name} will be removed; its sign-in and teams move over.`}
+                                  className="flex gap-1"
+                                >
+                                  <input type="hidden" name="playerId" value={p.id} />
+                                  <select
+                                    name="intoId"
+                                    defaultValue=""
+                                    className="rounded border border-line bg-card px-1 py-0.5 text-xs"
+                                    aria-label={`Same person as`}
+                                  >
+                                    <option value="" disabled>
+                                      Same person as…
+                                    </option>
+                                    {roster
+                                      .filter((o) => o.id !== p.id && !(o.email && p.email))
+                                      .map((o) => (
+                                        <option key={o.id} value={o.id}>
+                                          {o.name}
+                                        </option>
+                                      ))}
+                                  </select>
+                                  <SubmitButton variant="quiet">Merge</SubmitButton>
+                                </ActionForm>
+                              )}
                               {p.email && p.role !== "commissioner" && (
                                 <ActionForm
                                   action={act.unlink}

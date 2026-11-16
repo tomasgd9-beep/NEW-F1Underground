@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/db";
-import { activityLog, leagues, players, races, seasons } from "@/db/schema";
+import { activityLog, leagues, picks, players, races, seasons } from "@/db/schema";
 import {
   addPlayer,
   createEmailInvite,
@@ -9,6 +9,7 @@ import {
   getLeague,
   getPlayerForUser,
   joinAsNewPlayer,
+  mergePlayers,
   normaliseCode,
   pendingClaimForUser,
   regenerateCode,
@@ -211,5 +212,45 @@ describe("placeholder profiles", () => {
     expect(await unclaimedPlayers(db, leagueId)).toHaveLength(0);
     const me = await getPlayerForUser(db, tomas.id);
     await expect(deletePlaceholder(db, tomas.id, me!.id)).rejects.toThrow(/Deactivate/);
+  });
+});
+
+describe("merging profiles", () => {
+  it("moves the sign-in and teams onto the spreadsheet profile and removes the duplicate", async () => {
+    const [season] = await db.insert(seasons).values({ year: 2026, status: "active" }).returning();
+    const deadline = new Date();
+    const [old] = await db
+      .insert(races)
+      .values({ seasonId: season.id, round: 1, label: "R01 AUS", name: "A", deadline, lockedAt: deadline })
+      .returning();
+    const [open] = await db
+      .insert(races)
+      .values({ seasonId: season.id, round: 2, label: "R02 CHN", name: "C", deadline: new Date(Date.now() + 864e5) })
+      .returning();
+    const [gioacchino] = await db.insert(players).values({ leagueId, displayName: "Gioacchino" }).returning();
+    const u = await makeUser(db, "gio@example.com");
+    const gio = await joinAsNewPlayer(db, u, code, "Gio");
+    await db.insert(picks).values([
+      { playerId: gioacchino.id, raceId: old.id, penalty: 0, origin: "manual" },
+      { playerId: gio.id, raceId: old.id, penalty: 0, origin: "random" },
+      { playerId: gio.id, raceId: open.id, penalty: 0, origin: "manual" },
+    ]);
+
+    await mergePlayers(db, tomas.id, gio.id, gioacchino.id);
+
+    const rows = await db.select().from(players).where(eq(players.leagueId, leagueId));
+    expect(rows.map((r) => r.displayName).sort()).toEqual(["Gioacchino", "Tomás"]);
+    expect(rows.find((r) => r.displayName === "Gioacchino")!.userId).toBe(u.id);
+    const left = await db.select().from(picks).where(eq(picks.playerId, gioacchino.id));
+    expect(left).toHaveLength(2);
+    expect(left.find((p) => p.raceId === old.id)!.origin).toBe("manual"); // locked race keeps the sheet's team
+    expect(left.some((p) => p.raceId === open.id)).toBe(true); // open race takes the joined account's team
+  });
+
+  it("refuses to merge two signed-in profiles", async () => {
+    const u = await makeUser(db, "x@example.com");
+    const x = await joinAsNewPlayer(db, u, code, "Xavi");
+    const me = (await getPlayerForUser(db, tomas.id))!;
+    await expect(mergePlayers(db, tomas.id, x.id, me.id)).rejects.toThrow(/own sign-in/);
   });
 });

@@ -139,6 +139,13 @@ export async function deletePlaceholder(_: ActionResult, f: FormData): Promise<A
   return attempt(() => league.deletePlaceholder(getDb(), v.userId, num(f, "playerId")));
 }
 
+export async function mergePlayers(_: ActionResult, f: FormData): Promise<ActionResult> {
+  const v = await requireViewer();
+  const into = num(f, "intoId");
+  if (!into) return { error: "Choose who this profile is." };
+  return attempt(() => league.mergePlayers(getDb(), v.userId, num(f, "playerId"), into));
+}
+
 /* ───────────── Race control (commissioners) ───────────── */
 
 async function commissionerOrError() {

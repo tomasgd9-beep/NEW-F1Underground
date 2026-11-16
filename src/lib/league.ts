@@ -6,7 +6,7 @@
 // league, so more leagues can be switched on later.
 import { and, asc, eq, gt, isNull, ne, sql } from "drizzle-orm";
 import type { Db } from "@/db";
-import { activityLog, invites, leagues, picks, players, races, users } from "@/db/schema";
+import { activityLog, invites, leagues, picks, players, races, reminders, users } from "@/db/schema";
 
 export class LeagueError extends Error {}
 
@@ -453,6 +453,52 @@ export async function unlinkPlayer(db: Db, adminUserId: string, playerId: number
 }
 
 /** Commissioner: delete a placeholder profile (never signed in, no picks, no pending claim). */
+/**
+ * Two profiles that are the same person (e.g. "Gio" who joined, and "Gioacchino" from the
+ * spreadsheet): the sign-in and any teams move onto `intoId`, which keeps its name and history,
+ * and `fromId` is removed. Where both have a team for the same race, the locked race keeps
+ * `intoId`'s team and an open race keeps `fromId`'s (the one the person is editing now).
+ */
+export async function mergePlayers(db: Db, adminUserId: string, fromId: number, intoId: number) {
+  const me = await requireCommissioner(db, adminUserId);
+  if (fromId === intoId) throw new LeagueError("Pick two different profiles.");
+  const from = await playerInLeague(db, fromId, me.leagueId);
+  const into = await playerInLeague(db, intoId, me.leagueId);
+  if (from.userId && into.userId && from.userId !== into.userId) {
+    throw new LeagueError("Both profiles have their own sign-in. Unlink one of them first.");
+  }
+  const fromPicks = await db.select().from(picks).where(eq(picks.playerId, fromId));
+  for (const fp of fromPicks) {
+    const [race] = await db.select({ lockedAt: races.lockedAt }).from(races).where(eq(races.id, fp.raceId));
+    const [ip] = await db
+      .select({ id: picks.id })
+      .from(picks)
+      .where(and(eq(picks.playerId, intoId), eq(picks.raceId, fp.raceId)));
+    if (ip && race?.lockedAt) {
+      await db.delete(picks).where(eq(picks.id, fp.id));
+      continue;
+    }
+    if (ip) await db.delete(picks).where(eq(picks.id, ip.id));
+    await db.update(picks).set({ playerId: intoId }).where(eq(picks.id, fp.id));
+  }
+  await db.delete(reminders).where(eq(reminders.playerId, fromId)); // reminder log only
+  const userId = into.userId ?? from.userId;
+  const role = from.role === "commissioner" || into.role === "commissioner" ? "commissioner" : "player";
+  await db.update(players).set({ userId: null }).where(eq(players.id, fromId));
+  await db.delete(players).where(eq(players.id, fromId));
+  await db
+    .update(players)
+    .set({ userId, role, active: true, claimRequestedBy: null })
+    .where(eq(players.id, intoId));
+  await logActivity(
+    db,
+    adminUserId,
+    "players_merged",
+    { from: from.displayName, into: into.displayName, teamsMoved: fromPicks.length },
+    { leagueId: me.leagueId },
+  );
+}
+
 export async function deletePlaceholder(db: Db, adminUserId: string, playerId: number) {
   const me = await requireCommissioner(db, adminUserId);
   const p = await playerInLeague(db, playerId, me.leagueId);
