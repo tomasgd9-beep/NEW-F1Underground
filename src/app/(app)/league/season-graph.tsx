@@ -144,12 +144,12 @@ export function SeasonGraph({
           if (at < 0) return null;
           const val = (v: number) => (v > 0 && compare && metric !== "rank" ? `+${v}` : v);
           return (
-            <div className="mx-3 mb-2 rounded border border-line p-2 text-xs md:mx-0 md:mt-3 md:mr-3 md:mb-3 md:w-52 md:shrink-0">
-              <div className="flex items-baseline gap-1">
+            <div className="mx-3 mb-2 rounded border border-line p-2 text-xs md:mx-0 md:mt-3 md:mr-3 md:mb-3 md:w-max md:max-w-56 md:shrink-0">
+              <div className="flex flex-wrap items-baseline gap-x-1">
                 <b>{raceLabels[at]}</b>
                 {hover == null && (
-                  <span className="text-muted">
-                    · <span className="hidden md:inline">hover</span>
+                  <span className="text-[10px] text-muted md:basis-full">
+                    <span className="hidden md:inline">hover</span>
                     <span className="md:hidden">touch and drag</span> for other races
                   </span>
                 )}
@@ -165,7 +165,7 @@ export function SeasonGraph({
                     <span key={s.id} className={`flex items-center gap-1 ${s.id === meId ? "font-semibold" : ""}`}>
                       <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: colour(s.id) }} />
                       <span className="truncate">{s.name}</span>
-                      <b className="ml-auto tabular-nums">{val(s.values[at])}</b>
+                      <b className="ml-auto pl-3 tabular-nums">{val(s.values[at])}</b>
                     </span>
                   ))}
               </div>

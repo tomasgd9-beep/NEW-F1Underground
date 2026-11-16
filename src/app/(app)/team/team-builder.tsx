@@ -357,7 +357,7 @@ export function TeamBuilder({
                   key={k}
                   type="button"
                   onClick={() => setTab(k)}
-                  className={`px-3 py-1 ${tab === k ? "bg-navy text-white" : "text-muted"}`}
+                  className={`px-2 py-1 sm:px-3 ${tab === k ? "bg-navy text-white" : "text-muted"}`}
                 >
                   {k === "driver" ? "Drivers" : "Constructors"}
                 </button>
@@ -367,31 +367,32 @@ export function TeamBuilder({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search"
-              className="min-w-0 flex-1 rounded border border-line bg-transparent px-2 py-1 text-sm"
+              className="min-w-[4.5rem] flex-1 rounded border border-line bg-transparent px-2 py-1 text-sm"
             />
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as SortKey)}
-              className="rounded border border-line bg-card px-1.5 py-1 text-sm"
+              className="rounded border border-line bg-card px-1 py-1 text-sm"
               aria-label="Sort by"
             >
               <option value="price">Price</option>
               <option value="season">Season</option>
-              <option value="last3">Last 3 races</option>
+              <option value="last3">Last 3</option>
               <option value="name">Name</option>
             </select>
           </div>
 
-          <table className="w-full text-sm">
-            <thead className="text-xs text-muted">
-              <tr>
-                <th className="py-1 pl-3 text-left font-semibold">{tab === "driver" ? "Driver" : "Constructor"}</th>
-                <th className="px-2 text-right font-semibold">Season</th>
-                <th className="px-2 text-right font-semibold leading-tight">Last 3 races</th>
-                <th className="pr-2 text-right font-semibold">Price</th>
-                <th className="w-10 pr-2" aria-label="Add or remove" />
-              </tr>
-            </thead>
+          {/* Every row is the same 5-column grid: each column is as wide as its content
+              (ticker, 4-digit season, 3-digit last 3, price + move, button) and the space left
+              over is shared equally between the columns. */}
+          <div className="text-sm" role="table">
+            <div role="row" className={`${COLS} items-end py-1 text-xs font-semibold text-muted`}>
+              <span role="columnheader">{tab === "driver" ? "Driver" : "Constructor"}</span>
+              <span role="columnheader" className="text-right">Season</span>
+              <span role="columnheader" className="text-right leading-tight">Last 3 races</span>
+              <span role="columnheader" className="text-right">Price</span>
+              <span role="columnheader" aria-label="Add or remove" />
+            </div>
             {tab === "driver" ? (
               <>
                 <Group
@@ -405,7 +406,7 @@ export function TeamBuilder({
             ) : (
               <Group rows={list} inTeam={inTeam} onTap={tap} />
             )}
-          </table>
+          </div>
           {list.length === 0 && <p className="px-3 py-3 text-sm text-muted">Nothing matches “{query}”.</p>}
           <p className="border-t border-line px-3 py-1.5 text-[11px] text-muted">
             Season and Last 3 races: points scored so far this season. Price ▲▼: change since the last race.
@@ -416,6 +417,10 @@ export function TeamBuilder({
     </div>
   );
 }
+
+// ticker | season (4 digits) | last 3 (3 digits) | price + move | button; leftover space split evenly.
+const COLS =
+  "grid grid-cols-[4.5rem_2.6rem_2.4rem_6rem_2rem] justify-between gap-x-1 px-3 sm:grid-cols-[minmax(0,17rem)_2.6rem_2.4rem_6rem_2rem]";
 
 function Group({
   title,
@@ -430,51 +435,50 @@ function Group({
 }) {
   if (rows.length === 0) return null;
   return (
-    <tbody>
+    <div role="rowgroup">
       {title && (
-        <tr>
-          <th colSpan={5} className="bg-bg px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wide text-muted">
-            {title}
-          </th>
-        </tr>
+        <div className="border-t border-line bg-bg px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          {title}
+        </div>
       )}
       {rows.map((a) => {
         const picked = inTeam.has(a.id);
         return (
-          <tr
+          <div
             key={a.id}
+            role="row"
             onClick={() => onTap(a)}
-            className={`cursor-pointer border-t border-line ${picked ? "bg-red/10 dark:bg-red/20" : "hover:bg-black/[.03] dark:hover:bg-white/[.04]"}`}
+            className={`${COLS} cursor-pointer items-center border-t border-line py-1.5 ${
+              picked ? "bg-red/10 dark:bg-red/20" : "hover:bg-black/[.03] dark:hover:bg-white/[.04]"
+            }`}
           >
-            <td className="py-1.5 pl-3">
-              <div className="flex items-center gap-2">
-                <span className="h-6 w-1 shrink-0 rounded" style={{ background: a.colour }} />
-                <span className="min-w-0">
-                  <b>{a.ticker}</b>
-                  <span className="hidden text-muted sm:inline">
-                    {" "}
-                    {a.name}
-                    {a.kind === "driver" && ` · ${a.team}`}
-                  </span>
+            <span role="cell" className="flex min-w-0 items-center gap-2">
+              <span className="h-6 w-1 shrink-0 rounded" style={{ background: a.colour }} />
+              <span className="min-w-0 truncate">
+                <b>{a.ticker}</b>
+                <span className="hidden text-muted sm:inline">
+                  {" "}
+                  {a.name}
+                  {a.kind === "driver" && ` · ${a.team}`}
                 </span>
-              </div>
-            </td>
-            <td className={`px-2 text-right ${a.season < 0 ? "text-down" : ""}`}>
+              </span>
+            </span>
+            <span role="cell" className={`text-right tabular-nums ${a.season < 0 ? "text-down" : ""}`}>
               {pts(a.season)}
-            </td>
-            <td className={`px-2 text-right ${a.last3 < 0 ? "text-down" : ""}`}>
+            </span>
+            <span role="cell" className={`text-right tabular-nums ${a.last3 < 0 ? "text-down" : ""}`}>
               {pts(a.last3)}
-            </td>
-            <td className="pr-2 text-right whitespace-nowrap">
+            </span>
+            <span role="cell" className="text-right whitespace-nowrap tabular-nums">
               {fmt(a.price)}
               {a.move != null && a.move !== 0 && (
-                <span className={`ml-1 hidden text-[11px] min-[360px]:inline ${a.move > 0 ? "text-up" : "text-down"}`}>
+                <span className={`ml-1 text-[11px] ${a.move > 0 ? "text-up" : "text-down"}`}>
                   {a.move > 0 ? "▲" : "▼"}
                   {Math.abs(a.move).toFixed(2)}
                 </span>
               )}
-            </td>
-            <td className="py-1 pr-2">
+            </span>
+            <span role="cell">
               <button
                 type="button"
                 aria-label={picked ? `Remove ${a.ticker}` : `Add ${a.ticker}`}
@@ -490,10 +494,10 @@ function Group({
               >
                 {picked ? "×" : "+"}
               </button>
-            </td>
-          </tr>
+            </span>
+          </div>
         );
       })}
-    </tbody>
+    </div>
   );
 }
