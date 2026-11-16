@@ -329,6 +329,15 @@ function RaceView({
                   {team.penalty < 0 && (
                     <span className="rounded bg-down/10 px-1.5 py-0.5 text-xs font-semibold text-down">{team.penalty}</span>
                   )}
+                  {!!team.adjust && (
+                    <span
+                      title="Correction so this race matches the 2026 spreadsheet"
+                      className="rounded bg-black/5 px-1.5 py-0.5 text-xs text-muted dark:bg-white/10"
+                    >
+                      sheet {team.adjust > 0 ? "+" : ""}
+                      {team.adjust}
+                    </span>
+                  )}
                 </div>
               </li>
             );

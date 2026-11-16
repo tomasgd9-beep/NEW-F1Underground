@@ -112,6 +112,27 @@ async function nameTaken(db: Db, leagueId: number, name: string, exceptPlayerId?
   return !!taken;
 }
 
+const fold = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+
+/** The one unlinked profile whose name is this name, or this name's first word ("Alonso" for "Alonso Pérez"). */
+async function unlinkedProfileFor(db: Db, leagueId: number, name: string): Promise<Player | undefined> {
+  const open = await db
+    .select()
+    .from(players)
+    .where(and(eq(players.leagueId, leagueId), isNull(players.userId), isNull(players.claimRequestedBy)));
+  const full = fold(name);
+  const first = full.split(/\s+/)[0];
+  const exact = open.filter((p) => fold(p.displayName) === full);
+  if (exact.length === 1) return exact[0];
+  const byFirst = open.filter((p) => fold(p.displayName) === first);
+  return byFirst.length === 1 ? byFirst[0] : undefined;
+}
+
 function cleanName(raw: string): string {
   const name = raw.trim().replace(/\s+/g, " ");
   if (name.length < 2 || name.length > 40) throw new LeagueError("Pick a name between 2 and 40 characters.");
@@ -281,6 +302,24 @@ export async function joinAsNewPlayer(db: Db, user: { id: string }, key: string,
   if (await alreadyIn(db, jk.league.id, user.id)) throw new LeagueError("You're already in this league.");
   if (await pendingClaimForUser(db, user.id)) throw new LeagueError("You already have a request waiting for a commissioner.");
   const name = cleanName(rawName);
+
+  // Someone who played on the spreadsheet already has a profile with their
+  // first name (and their 2026 teams): joining under that name links it.
+  const profile = await unlinkedProfileFor(db, jk.league.id, name);
+  if (profile) {
+    const rename = !(await nameTaken(db, jk.league.id, name, profile.id));
+    const [p] = await db
+      .update(players)
+      .set({ userId: user.id, ...(rename ? { displayName: name } : {}) })
+      .where(and(eq(players.id, profile.id), isNull(players.userId)))
+      .returning();
+    if (p) {
+      await consumeInvite(db, jk.invite, user.id);
+      await logActivity(db, user.id, "joined", { playerId: p.id, linked: true }, { leagueId: jk.league.id });
+      return p;
+    }
+  }
+
   if (await nameTaken(db, jk.league.id, name)) {
     throw new LeagueError("Someone in the league already uses that name. Add a surname initial, e.g. \"Tomas G\".");
   }

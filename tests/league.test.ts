@@ -93,6 +93,16 @@ describe("league code", () => {
     await expect(joinAsNewPlayer(db, u1, code, "Ana again")).rejects.toThrow(/already in this league/);
   });
 
+  it("links a spreadsheet profile when someone joins under its name", async () => {
+    await db.insert(players).values({ leagueId, displayName: "Joaquin" });
+    const u = await makeUser(db, "jq@example.com");
+    const p = await joinAsNewPlayer(db, u, code, "Joaquín Pérez");
+    expect(p.displayName).toBe("Joaquín Pérez");
+    expect(p.userId).toBe(u.id);
+    const rows = await db.select().from(players).where(eq(players.leagueId, leagueId));
+    expect(rows.filter((r) => r.displayName.startsWith("Joaqu"))).toHaveLength(1);
+  });
+
   it("refuses a taken name, case-insensitively", async () => {
     const u = await makeUser(db, "c@example.com");
     await expect(joinAsNewPlayer(db, u, code, "tomás")).rejects.toThrow(/already uses/);

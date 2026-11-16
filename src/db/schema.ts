@@ -278,6 +278,8 @@ export const picks = pgTable(
     constructorId: integer("constructor_id").references(() => constructors.id),
     frozenTeamPrice: numeric("frozen_team_price", { precision: 7, scale: 2 }),
     penalty: integer("penalty"),
+    /** Correction so an imported race scores exactly what the old spreadsheet said (0 for site-made teams). */
+    scoreAdjust: integer("score_adjust").notNull().default(0),
     origin: pickOrigin("origin").notNull().default("manual"),
     savedAt: timestamp("saved_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   },

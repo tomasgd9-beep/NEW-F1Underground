@@ -2,7 +2,13 @@
 
 export type Slot = "x2" | "d" | "c";
 export type TeamPick = { assetId: string; slot: Slot };
-export type RaceTeam = { picks: TeamPick[]; penalty: number; origin: "manual" | "random" | "auto_filled" };
+export type RaceTeam = {
+  picks: TeamPick[];
+  penalty: number;
+  origin: "manual" | "random" | "auto_filled";
+  /** Spreadsheet correction on imported races (see picks.scoreAdjust). */
+  adjust?: number;
+};
 
 /** points[raceId][assetId] = that asset's total for the race (null = no points yet). */
 export type PointsMap = Record<number, Record<string, number | null>>;
@@ -18,7 +24,7 @@ export function teamScore(team: RaceTeam, pts: Record<string, number | null> | u
       x2 = 2 * v;
     } else total += v;
   }
-  return { total: total + team.penalty, x2 };
+  return { total: total + team.penalty + (team.adjust ?? 0), x2 };
 }
 
 /** Ranks with ties sharing a place and the next place skipped (1, 1, 3). */

@@ -1,0 +1,1 @@
+ALTER TABLE "picks" ADD COLUMN "score_adjust" integer DEFAULT 0 NOT NULL;

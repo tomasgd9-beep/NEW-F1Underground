@@ -15,6 +15,13 @@
       "when": 1794784741386,
       "tag": "0001_league_codes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794796633802,
+      "tag": "0002_picks_score_adjust",
+      "breakpoints": true
     }
   ]
 }

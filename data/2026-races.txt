@@ -1,0 +1,21 @@
+# fftRound|sheetLabel|name|country|city|sprint|start_times
+1|R1 AUS|Australian Grand Prix|AUS|Melbourne|0|{"qualifying":"2026-03-07T05:00:00.000Z","race":"2026-03-08T04:00:00.000Z"}
+2|R2 CHN|Chinese Grand Prix|CHN|Shanghai|1|{"qualifying":"2026-03-14T07:00:00.000Z","race":"2026-03-15T07:00:00.000Z","sprint":"2026-03-14T03:00:00.000Z"}
+3|R3 JPN|Japanese Grand Prix|JPN|Suzuka|0|{"qualifying":"2026-03-28T06:00:00.000Z","race":"2026-03-29T05:00:00.000Z"}
+4|R6 USA|Miami Grand Prix|USA|Miami|1|{"qualifying":"2026-05-02T20:00:00.000Z","race":"2026-05-03T17:00:00.000Z","sprint":"2026-05-02T16:00:00.000Z"}
+5|R7 CAN|Canadian Grand Prix|CAN|Montreal|1|{"qualifying":"2026-05-23T20:00:00.000Z","race":"2026-05-24T20:00:00.000Z","sprint":"2026-05-23T16:00:00.000Z"}
+6|R8 MCO|Monaco Grand Prix|MCO|Monte Carlo|0|{"qualifying":"2026-06-06T14:00:00.000Z","race":"2026-06-07T13:00:00.000Z"}
+7|R9 ESP|Barcelona Grand Prix|ESP|Catalunya|0|{"qualifying":"2026-06-13T14:00:00.000Z","race":"2026-06-14T13:00:00.000Z"}
+8|R10 AUT|Austrian Grand Prix|AUT|Spielberg|0|{"qualifying":"2026-06-27T14:00:00.000Z","race":"2026-06-28T13:00:00.000Z"}
+9|R11 GBR|British Grand Prix|GBR|Silverstone|1|{"qualifying":"2026-07-04T15:00:00.000Z","race":"2026-07-05T14:00:00.000Z","sprint":"2026-07-04T11:00:00.000Z"}
+10|R12 BEL|Belgian Grand Prix|BEL|Spa-Francorchamps|0|{"qualifying":"2026-07-18T14:00:00.000Z","race":"2026-07-19T13:00:00.000Z"}
+11|R13 HUN|Hungarian Grand Prix|HUN|Hungaroring|0|{"qualifying":"2026-07-25T14:00:00.000Z","race":"2026-07-26T13:00:00.000Z"}
+12|R14 NED|Dutch Grand Prix|NLD|Zandvoort|1|{"qualifying":"2026-08-22T14:00:00.000Z","race":"2026-08-23T13:00:00.000Z","sprint":"2026-08-22T10:00:00.000Z"}
+13|R15 ITA|Italian Grand Prix|ITA|Monza|0|{"qualifying":"2026-09-05T14:00:00.000Z","race":"2026-09-06T13:00:00.000Z"}
+14|R16 ESP|Spanish Grand Prix|ESP|Madring|0|{"qualifying":"2026-09-12T14:00:00.000Z","race":"2026-09-13T13:00:00.000Z"}
+15|R17 AZE|Azerbaijan Grand Prix|AZE|Baku|0|{"qualifying":"2026-09-25T12:00:00.000Z","race":"2026-09-26T11:00:00.000Z"}
+16|R18 SEP|Bahrain Grand Prix|BHR|Kuala Lumpur|0|{"qualifying":"2026-10-03T08:00:00.000Z","race":"2026-10-04T07:00:00.000Z"}
+17|R19 SIN|Singapore Grand Prix|SGP|Singapore|1|{"qualifying":"2026-10-10T13:00:00.000Z","race":"2026-10-11T12:00:00.000Z","sprint":"2026-10-10T09:00:00.000Z"}
+18|R20 USA|United States Grand Prix|USA|Austin|0|{"qualifying":"2026-10-24T21:00:00.000Z","race":"2026-10-25T20:00:00.000Z"}
+19|R21 MEX|Mexico City Grand Prix|MEX|Mexico City|0|{"qualifying":"2026-10-31T21:00:00.000Z","race":"2026-11-01T20:00:00.000Z"}
+20|R22 BRA|São Paulo Grand Prix|BRA|Interlagos|0|{"qualifying":"2026-11-07T18:00:00.000Z","race":"2026-11-08T17:00:00.000Z"}

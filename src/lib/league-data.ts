@@ -78,7 +78,7 @@ export async function loadLeague(db: Db, leagueId: number, meId: number, seasonI
       (submitted[p.raceId] ??= []).push(p.playerId);
       continue;
     }
-    const team: RaceTeam = { picks: [], penalty: p.penalty ?? 0, origin: p.origin };
+    const team: RaceTeam = { picks: [], penalty: p.penalty ?? 0, origin: p.origin, adjust: p.scoreAdjust ?? 0 };
     if (p.doubleStintId) team.picks.push({ assetId: `s${p.doubleStintId}`, slot: "x2" });
     for (const d of [p.driver1StintId, p.driver2StintId, p.driver3StintId, p.driver4StintId]) {
       if (d) team.picks.push({ assetId: `s${d}`, slot: "d" });
