@@ -432,6 +432,8 @@ export async function importPrices(db: Db, race: Race, text: string): Promise<{ 
     const cells = line.trim().split(/\t+|\s+/).filter(Boolean);
     if (cells.length < 2) continue;
     const ticker = cells[0].toUpperCase();
+    // Header and divider rows from the sheet ("Driver / Constr", "Driver", "Constructor") are skipped.
+    if (!/^[A-Z]{2,4}$/.test(ticker) || ["DRIVER", "CONSTR", "CONSTRUCTOR", "TYPE"].includes(ticker)) continue;
     const priceCell = [...cells].reverse().find((c) => /^-?\d+([.,]\d+)?$/.test(c));
     if (!priceCell) continue;
     const price = round2(Number(priceCell.replace(",", ".")));

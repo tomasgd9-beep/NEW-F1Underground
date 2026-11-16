@@ -80,6 +80,24 @@ describe("syncing from f1fantasytools", () => {
 });
 
 describe("prices", () => {
+  it("reads the Team Builder table pasted straight from the sheet", async () => {
+    await syncFromFft(db, fixture());
+    const vegas = (await currentRace(db))!;
+    const sheet = [
+      '"Driver /',
+      'Constr"\tType\tSeason\tLast 3\tRaces\t2025 Price\tLast 3 Price\tNew Price',
+      "VER\tDriver\t631\t141\t3\t53.26\t43.16\t43.16",
+      "\tDriver\t\t\t\t\t\t20.00",
+      "\tConstructor\t\t\t\t\t\t100.00",
+      "MER\tConstructor\t1543\t181\t3\t68.87\t55.40\t55.40",
+      "OCO\tAsset Inactive\t162\t19\t3\t9.79\t5.82\t5.82",
+    ].join("\n");
+    expect(await importPrices(db, vegas, sheet)).toEqual({ set: 3, unknown: [] });
+    const assets = await teamAssets(db, vegas);
+    expect(assets.find((a) => a.ticker === "VER")?.price).toBe(43.16);
+    expect(assets.find((a) => a.ticker === "MER")?.price).toBe(55.4);
+  });
+
   it("imports prices pasted from the sheet and reports unknown tickers", async () => {
     await syncFromFft(db, fixture());
     const vegas = (await currentRace(db))!;
