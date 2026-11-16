@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { LeagueData, LeagueRace } from "@/lib/league-data";
 import { heat, rankHistory, shareRanks, standings, teamScore, type StandingRow } from "@/lib/standings";
 import { SeasonGraph } from "./season-graph";
@@ -351,6 +351,17 @@ function ChipDetail({
   pos: { x: number; y: number; pinned: boolean };
   onClose: () => void;
 }) {
+  // Phones: the box is pinned to the bottom; leave the same amount of room under the
+  // table so the last teams can still be scrolled into view above it.
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const [sheetH, setSheetH] = useState(0);
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setSheetH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const a = data.assets[assetId];
   const parts = data.parts[raceId]?.[assetId] ?? {};
   const isX2 = data.teams[raceId]?.[playerId]?.picks.some((p) => p.assetId === assetId && p.slot === "x2");
@@ -413,7 +424,11 @@ function ChipDetail({
   // Phones: bottom sheet. Desktop: pop-up under the chip.
   return (
     <>
-      <div className="fixed inset-x-0 bottom-[calc(41px+env(safe-area-inset-bottom))] z-30 border-t border-line bg-card p-3 shadow-lg md:hidden">
+      <div aria-hidden className="md:hidden" style={{ height: sheetH }} />
+      <div
+        ref={sheetRef}
+        className="fixed inset-x-0 bottom-[calc(41px+env(safe-area-inset-bottom))] z-30 border-t border-line bg-card p-3 shadow-lg md:hidden"
+      >
         {body}
       </div>
       <div
