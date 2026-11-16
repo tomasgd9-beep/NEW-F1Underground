@@ -220,12 +220,12 @@ function RaceView({
     rows.filter((r) => r.team!.picks.some((p) => p.assetId === assetId)).map((r) => r.pid);
 
   return (
-    <section className="grid gap-2" onClick={() => chip?.pinned && setChip(null)}>
+    <section className="grid gap-2">
       {raceSelector}
       <div className="rounded-lg border border-line bg-card">
         <p className="border-b border-line px-3 py-2 text-sm">
           <b>{race.name}</b>{" "}
-          <span className="text-muted">· tap a pick for its breakdown and who else has it</span>
+          <span className="text-muted">· tap a pick for its breakdown and who else has it (✕ to close)</span>
         </p>
         <ul className="divide-y divide-line">
           {rows.map((r, i) => {
@@ -270,12 +270,6 @@ function RaceView({
                         <button
                           key={c.assetId + c.slot}
                           type="button"
-                          onMouseEnter={(e) => {
-                            if (chip?.pinned || !window.matchMedia("(hover: hover)").matches) return;
-                            const b = e.currentTarget.getBoundingClientRect();
-                            setChip({ assetId: c.assetId, playerId: r.pid, pinned: false, x: b.left, y: b.bottom });
-                          }}
-                          onMouseLeave={() => chip && !chip.pinned && setChip(null)}
                           onClick={(e) => {
                             e.stopPropagation();
                             const b = e.currentTarget.getBoundingClientRect();
