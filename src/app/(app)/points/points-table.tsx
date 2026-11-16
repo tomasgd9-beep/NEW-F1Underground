@@ -147,7 +147,7 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
                 <Fragment key={r.key}>
                   <tr
                     onClick={() => setOpen(isOpen ? null : r.key)}
-                    className={`cursor-pointer border-t border-line md:cursor-default ${isOpen ? "bg-black/[.03] md:bg-transparent dark:bg-white/[.04]" : ""}`}
+                    className={`cursor-pointer border-t border-line ${isOpen ? "bg-black/[.03] dark:bg-white/[.04]" : "hover:bg-black/[.02] dark:hover:bg-white/[.03]"}`}
                   >
                     <td className="py-1.5 pl-3 whitespace-nowrap">
                       <div className="flex items-center gap-2">
@@ -181,13 +181,16 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
                     {locked && <td className={`pr-3 text-right ${r.picked ? "" : "text-muted"}`}>{r.picked}</td>}
                   </tr>
                   {isOpen && (
-                    <tr className="bg-black/[.03] md:hidden dark:bg-white/[.04]">
+                    <tr className="bg-black/[.03] dark:bg-white/[.04]">
                       <td colSpan={nBrk + 4 + (locked ? (isDriver ? 2 : 1) : 0)} className="px-3 pb-2 text-xs">
-                        <div className="mb-1 text-muted">
+                        <div className="mb-1 text-muted md:hidden">
                           {r.name}
                           {r.kind === "driver" && ` · ${r.team}`}
                         </div>
-                        <Detail row={r} />
+                        <div className="md:hidden">
+                          <Detail row={r} />
+                        </div>
+                        <PickedBy row={r} />
                       </td>
                     </tr>
                   )}
@@ -199,11 +202,37 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
       </div>
       {list.length === 0 && <p className="px-3 py-3 text-sm text-muted">Nothing to show.</p>}
       <p className="border-t border-line px-3 py-1.5 text-[11px] text-muted">
-        <span className="md:hidden">Tap a row for the session breakdown. </span>
+        <span className="md:hidden">Tap a row for the session breakdown and who picked it. </span>
+        <span className="hidden md:inline">Click a row to see who picked it. </span>
         Season and Last 3 are as of now.
         {!locked && " Picks are shown after the deadline."}
       </p>
     </section>
+  );
+}
+
+function PickedBy({ row }: { row: PointsRow }) {
+  const by = row.pickedBy;
+  if (!by) return <div className="mt-1 text-muted">Teams are shown once the race locks.</div>;
+  const total = by.x2.length + by.x1.length;
+  return (
+    <div className="mt-1 grid gap-0.5">
+      {total === 0 && <div className="text-muted">Nobody picked {row.ticker}.</div>}
+      {by.x2.length > 0 && (
+        <div>
+          <span className="mr-1 rounded bg-red px-1 text-[10px] font-bold text-white">×2</span>
+          <span className="text-muted">Picked as ×2 by {by.x2.length}:</span> {by.x2.join(", ")}
+        </div>
+      )}
+      {by.x1.length > 0 && (
+        <div>
+          <span className="text-muted">
+            Picked{row.kind === "driver" ? " as ×1" : ""} by {by.x1.length}:
+          </span>{" "}
+          {by.x1.join(", ")}
+        </div>
+      )}
+    </div>
   );
 }
 

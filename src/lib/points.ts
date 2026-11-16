@@ -18,6 +18,8 @@ export type PointsRow = {
   last3: number;
   picked: number | null;
   doubled: number | null;
+  /** Who picked it (locked races only): as ×2 and as a regular pick. */
+  pickedBy: { x2: string[]; x1: string[] } | null;
 };
 
 const n = (v: string | null | undefined) => (v == null ? 0 : Number(v));
@@ -62,20 +64,30 @@ export async function pointsForRace(db: Db, raceId: number, leagueId: number): P
   // Picks are only shown once the race is locked.
   const pickCount = new Map<string, number>();
   const doubleCount = new Map<string, number>();
+  const byX1 = new Map<string, string[]>();
+  const byX2 = new Map<string, string[]>();
   if (race.lockedAt) {
     const rows = await db
       .select()
       .from(picks)
       .innerJoin(players, eq(players.id, picks.playerId))
       .where(and(eq(picks.raceId, raceId), eq(players.leagueId, leagueId)));
-    for (const { picks: p } of rows) {
+    rows.sort((a, b) => a.players.displayName.localeCompare(b.players.displayName));
+    for (const { picks: p, players: pl } of rows) {
       // "picked" counts ×1 picks only; ×2 picks are counted separately.
       const ids = [
         ...[p.driver1StintId, p.driver2StintId, p.driver3StintId, p.driver4StintId].map((v) => v && `s${v}`),
         p.constructorId && `c${p.constructorId}`,
       ].filter(Boolean) as string[];
-      for (const id of ids) pickCount.set(id, (pickCount.get(id) ?? 0) + 1);
-      if (p.doubleStintId) doubleCount.set(`s${p.doubleStintId}`, (doubleCount.get(`s${p.doubleStintId}`) ?? 0) + 1);
+      for (const id of ids) {
+        pickCount.set(id, (pickCount.get(id) ?? 0) + 1);
+        byX1.set(id, [...(byX1.get(id) ?? []), pl.displayName]);
+      }
+      if (p.doubleStintId) {
+        const id = `s${p.doubleStintId}`;
+        doubleCount.set(id, (doubleCount.get(id) ?? 0) + 1);
+        byX2.set(id, [...(byX2.get(id) ?? []), pl.displayName]);
+      }
     }
   }
 
@@ -112,6 +124,7 @@ export async function pointsForRace(db: Db, raceId: number, leagueId: number): P
         last3: last3By.get(`p${s.personId}`) ?? 0,
         picked: race.lockedAt ? pickCount.get(k) ?? 0 : null,
         doubled: race.lockedAt ? doubleCount.get(k) ?? 0 : null,
+        pickedBy: race.lockedAt ? { x2: byX2.get(k) ?? [], x1: byX1.get(k) ?? [] } : null,
       });
     } else if (p.constructorId) {
       const c = consInfo.find((x) => x.id === p.constructorId);
@@ -130,6 +143,7 @@ export async function pointsForRace(db: Db, raceId: number, leagueId: number): P
         last3: last3By.get(k) ?? 0,
         picked: race.lockedAt ? pickCount.get(k) ?? 0 : null,
         doubled: null,
+        pickedBy: race.lockedAt ? { x2: [], x1: byX1.get(k) ?? [] } : null,
       });
     }
   }
