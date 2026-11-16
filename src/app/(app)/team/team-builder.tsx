@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Countdown } from "@/components/countdown";
 import {
   SLOTS,
@@ -62,6 +62,21 @@ export function TeamBuilder({
   const [saved, setSaved] = useState<Picks>(initialPicks);
   const [savedAt, setSavedAt] = useState(initialSavedAt);
   const [active, setActive] = useState<Slot | null>(null);
+  const listRef = useRef<HTMLElement>(null);
+  const builderRef = useRef<HTMLElement>(null);
+  // On phones and tablets the list sits below the team: jump between them.
+  const stacked = () => typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
+
+  function chooseSlot(slot: Slot) {
+    if (locked) return;
+    if (active === slot) {
+      setActive(null);
+      return;
+    }
+    setActive(slot);
+    setTab(slot === "team" ? "constructor" : "driver");
+    if (stacked()) requestAnimationFrame(() => listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
   const [tab, setTab] = useState<"driver" | "constructor">("driver");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("price");
@@ -100,7 +115,11 @@ export function TeamBuilder({
       return;
     }
     setPicks({ ...picks, [slot]: a.id });
+    const cameFromSlot = active !== null;
     setActive(null);
+    if (cameFromSlot && stacked()) {
+      requestAnimationFrame(() => builderRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
   }
 
   function save() {
@@ -136,7 +155,7 @@ export function TeamBuilder({
   return (
     <div className="grid gap-3 lg:grid-cols-[380px_1fr] lg:items-start">
       {/* ───────── Builder ───────── */}
-      <section className="rounded-lg border border-line bg-card lg:sticky lg:top-15">
+      <section ref={builderRef} className="scroll-mt-14 rounded-lg border border-line bg-card lg:sticky lg:top-15">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-line px-3 py-2">
           <h1 className="font-bold">
             {race.label} · {race.name}
@@ -173,8 +192,8 @@ export function TeamBuilder({
                 <div
                   role={locked ? undefined : "button"}
                   tabIndex={locked ? undefined : 0}
-                  onClick={() => !locked && setActive(on ? null : slot)}
-                  onKeyDown={(e) => e.key === "Enter" && !locked && setActive(on ? null : slot)}
+                  onClick={() => chooseSlot(slot)}
+                  onKeyDown={(e) => e.key === "Enter" && chooseSlot(slot)}
                   className={`flex h-10 items-center gap-2 px-3 text-sm ${on ? "bg-red/10 outline-2 -outline-offset-2 outline-red" : ""} ${
                     locked ? "" : "cursor-pointer"
                   }`}
@@ -281,7 +300,7 @@ export function TeamBuilder({
 
       {/* ───────── Asset list ───────── */}
       {!locked && (
-        <section className="rounded-lg border border-line bg-card">
+        <section ref={listRef} className="scroll-mt-14 rounded-lg border border-line bg-card">
           <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
             <div className="flex overflow-hidden rounded border border-line text-sm font-semibold">
               {(["driver", "constructor"] as const).map((k) => (
