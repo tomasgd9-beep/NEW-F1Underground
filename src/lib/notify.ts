@@ -150,7 +150,7 @@ export function reminderEmail(
   const lines = statusLines(status);
   const action = !status.saved || status.empty.length || status.penalty < 0 ? "Fix my team" : "Open My team";
   return {
-    subject: `${race.label}: teams lock in ${hours} h`,
+    subject: `F1 Underground deadline - ${race.label} locks in ${hours}hs`,
     text: `Hi ${name},\n\n${race.name} teams lock ${etTime(deadline)} (in about ${hours} hours).\n${lines.join("\n")}\n\n${url}\n`,
     html:
       `<p>Hi ${escapeHtml(name)},</p><p><b>${escapeHtml(race.name)}</b> teams lock <b>${etTime(deadline)}</b> (in about ${hours} hours).</p>` +
