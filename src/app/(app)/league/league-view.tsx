@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { LeagueData, LeagueRace } from "@/lib/league-data";
 import { heat, rankHistory, shareRanks, standings, teamScore, type StandingRow } from "@/lib/standings";
 import { SeasonGraph } from "./season-graph";
+import { LeagueHeader } from "@/components/league-header";
 
 const f = (n: number | null | undefined) => (n == null ? "–" : Number.isInteger(n) ? String(n) : n.toFixed(1));
 const neg = (n: number | null | undefined) => (n != null && n < 0 ? "text-down" : "");
@@ -32,43 +32,32 @@ export function LeagueView({
   joinUrl: string;
 }) {
   const [view, setView] = useState<"race" | "season">("race");
-  const [copied, setCopied] = useState(false);
 
   const header = (
-    <div className="flex flex-wrap items-center gap-2">
-      <h1 className="text-lg font-bold">{leagueName}</h1>
-      {data && data.seasons.length > 0 && <SeasonChip data={data} />}
-      {code && (
-        <button
-          type="button"
-          onClick={async () => {
-            await navigator.clipboard.writeText(joinUrl);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          }}
-          className="flex items-center gap-1.5 rounded border border-line bg-card px-2 py-0.5 text-sm"
-          title="Copy the join link"
-        >
-          <span className="text-muted">Code</span>
-          <b className="tracking-widest">{code}</b>
-          <span className="font-semibold text-red">{copied ? "Copied" : "Copy link"}</span>
-        </button>
-      )}
-      {data && (
-        <div className="ml-auto flex overflow-hidden rounded border border-line text-sm font-semibold">
-          {(["race", "season"] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setView(k)}
-              className={`px-3 py-1 ${view === k ? "bg-navy text-white" : "bg-card text-muted"}`}
-            >
-              {k === "race" ? "Race" : "Season"}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <LeagueHeader
+      leagueName={leagueName}
+      seasons={data?.seasons ?? []}
+      seasonId={data?.season.id ?? null}
+      basePath="/league"
+      code={code}
+      joinUrl={joinUrl}
+      right={
+        data && (
+          <div className="flex overflow-hidden rounded border border-line text-sm font-semibold">
+            {(["race", "season"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setView(k)}
+                className={`px-3 py-1 ${view === k ? "bg-navy text-white" : "bg-card text-muted"}`}
+              >
+                {k === "race" ? "Race" : "Season"}
+              </button>
+            ))}
+          </div>
+        )
+      }
+    />
   );
 
   if (!data || data.races.length === 0) {
@@ -82,27 +71,6 @@ export function LeagueView({
     );
   }
   return <Inner data={data} header={header} view={view} setView={setView} />;
-}
-
-function SeasonChip({ data }: { data: LeagueData }) {
-  return (
-    <details className="relative">
-      <summary className="cursor-pointer list-none rounded-full border border-line bg-card px-2.5 py-0.5 text-sm font-semibold">
-        {data.season.year} ▾
-      </summary>
-      <div className="absolute left-0 z-20 mt-1 min-w-24 rounded border border-line bg-card py-1 shadow">
-        {[...data.seasons].reverse().map((s) => (
-          <Link
-            key={s.id}
-            href={`/league?season=${s.id}`}
-            className={`block px-3 py-1 text-sm ${s.id === data.season.id ? "font-bold" : "text-muted"}`}
-          >
-            {s.year}
-          </Link>
-        ))}
-      </div>
-    </details>
-  );
 }
 
 function Inner({

@@ -43,7 +43,12 @@ export type LeagueData = {
 const n = (v: string | null | undefined) => (v == null ? null : Number(v));
 
 export async function loadLeague(db: Db, leagueId: number, meId: number, seasonId?: number): Promise<LeagueData | null> {
-  const allSeasons = await db.select({ id: seasons.id, year: seasons.year }).from(seasons).orderBy(asc(seasons.year));
+  // Only seasons that have races on the site (earlier years lived in other spreadsheets).
+  const allSeasons = await db
+    .selectDistinct({ id: seasons.id, year: seasons.year })
+    .from(seasons)
+    .innerJoin(races, eq(races.seasonId, seasons.id))
+    .orderBy(asc(seasons.year));
   if (!allSeasons.length) return null;
   const season = allSeasons.find((s) => s.id === seasonId) ?? allSeasons.at(-1)!;
 
