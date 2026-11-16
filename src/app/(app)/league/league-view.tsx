@@ -154,6 +154,9 @@ function RaceView({
 }) {
   const race = data.races.find((r) => r.id === raceId) ?? data.races.at(-1)!;
   const [chip, setChip] = useState<{ assetId: string; playerId: number; pinned: boolean; x: number; y: number } | null>(null);
+  // Mouse hover lights up who else has a pick (no box); a click pins it and opens the box.
+  const [hoverAsset, setHoverAsset] = useState<string | null>(null);
+  const lit = chip?.assetId ?? hoverAsset;
 
   useEffect(() => {
     if (focusPlayer) document.getElementById(`p-${focusPlayer}`)?.scrollIntoView({ block: "center" });
@@ -264,12 +267,14 @@ function RaceView({
                 <div className="col-span-3 flex items-center gap-1 md:col-span-1">
                   <div className="grid flex-1 grid-cols-6 gap-1 md:max-w-[34rem]">
                     {chips.map((c) => {
-                      const on = chip?.assetId === c.assetId;
+                      const on = lit === c.assetId;
                       const colour = c.a?.colour ?? "#888888";
                       return (
                         <button
                           key={c.assetId + c.slot}
                           type="button"
+                          onPointerEnter={(e) => e.pointerType === "mouse" && setHoverAsset(c.assetId)}
+                          onPointerLeave={(e) => e.pointerType === "mouse" && setHoverAsset(null)}
                           onClick={(e) => {
                             e.stopPropagation();
                             const b = e.currentTarget.getBoundingClientRect();
