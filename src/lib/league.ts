@@ -6,7 +6,7 @@
 // league, so more leagues can be switched on later.
 import { and, asc, eq, gt, isNull, ne, sql } from "drizzle-orm";
 import type { Db } from "@/db";
-import { activityLog, invites, leagues, picks, players, races, reminders, users } from "@/db/schema";
+import { activityLog, invites, leagues, picks, players, races, reminders, users, verificationTokens } from "@/db/schema";
 
 export class LeagueError extends Error {}
 
@@ -499,17 +499,48 @@ export async function mergePlayers(db: Db, adminUserId: string, fromId: number, 
   );
 }
 
-export async function deletePlaceholder(db: Db, adminUserId: string, playerId: number) {
+/**
+ * Removes someone completely: their profile in this league, every team they saved, and,
+ * if they aren't in any other league, their sign-in too (so nothing about them is kept).
+ * Can't be used on yourself or on the last commissioner.
+ */
+export async function removePlayer(db: Db, adminUserId: string, playerId: number) {
   const me = await requireCommissioner(db, adminUserId);
   const p = await playerInLeague(db, playerId, me.leagueId);
-  if (p.userId || p.claimRequestedBy) {
-    throw new LeagueError("Only profiles nobody has signed in to can be deleted. Deactivate this one instead.");
+  if (p.id === me.id) throw new LeagueError("You can't remove yourself.");
+  if (p.role === "commissioner") {
+    const [{ n }] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(players)
+      .where(and(eq(players.leagueId, me.leagueId), eq(players.role, "commissioner"), eq(players.active, true)));
+    if (n <= 1) throw new LeagueError("They're the last commissioner. Make someone else commissioner first.");
   }
-  const [{ n }] = await db
-    .select({ n: sql<number>`count(*)::int` })
+  const [{ teams }] = await db
+    .select({ teams: sql<number>`count(*)::int` })
     .from(picks)
     .where(eq(picks.playerId, playerId));
-  if (n > 0) throw new LeagueError("This profile has teams saved, so it can't be deleted. Deactivate it instead.");
+  await db.delete(reminders).where(eq(reminders.playerId, playerId));
+  await db.delete(picks).where(eq(picks.playerId, playerId));
   await db.delete(players).where(eq(players.id, playerId));
-  await logActivity(db, adminUserId, "player_deleted", { playerId, name: p.displayName }, { leagueId: me.leagueId });
+  let accountDeleted = false;
+  if (p.userId) {
+    const [{ others }] = await db
+      .select({ others: sql<number>`count(*)::int` })
+      .from(players)
+      .where(eq(players.userId, p.userId));
+    if (others === 0) {
+      const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, p.userId));
+      if (u?.email) await db.delete(verificationTokens).where(eq(verificationTokens.identifier, u.email));
+      await db.delete(users).where(eq(users.id, p.userId)); // sessions and Google links go with it
+      accountDeleted = true;
+    }
+  }
+  // Only the name is kept in the log, so commissioners can see who was removed.
+  await logActivity(
+    db,
+    adminUserId,
+    "player_removed",
+    { name: p.displayName, teamsDeleted: teams, accountDeleted },
+    { leagueId: me.leagueId },
+  );
 }

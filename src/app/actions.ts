@@ -165,7 +165,7 @@ export async function sampleReminder(): Promise<ActionResult> {
 
 export async function deletePlaceholder(_: ActionResult, f: FormData): Promise<ActionResult> {
   const v = await requireViewer();
-  return attempt(() => league.deletePlaceholder(getDb(), v.userId, num(f, "playerId")));
+  return attempt(() => league.removePlayer(getDb(), v.userId, num(f, "playerId")));
 }
 
 export async function mergePlayers(_: ActionResult, f: FormData): Promise<ActionResult> {

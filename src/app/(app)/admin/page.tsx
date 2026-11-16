@@ -234,10 +234,13 @@ export default async function Admin({
                                 <input type="hidden" name="active" value={p.active ? "0" : "1"} />
                                 <SubmitButton variant="quiet">{p.active ? "Deactivate" : "Reactivate"}</SubmitButton>
                               </ActionForm>
-                              {!p.email && !p.claimEmail && (
-                                <ActionForm action={act.deletePlaceholder} confirm={`Delete the profile ${p.name}?`}>
+                              {p.id !== v.player.id && (
+                                <ActionForm
+                                  action={act.deletePlaceholder}
+                                  confirm={`Remove ${p.name} completely? Their profile, every team they saved${p.email ? " and their sign-in" : ""} are deleted. This can't be undone.`}
+                                >
                                   <input type="hidden" name="playerId" value={p.id} />
-                                  <SubmitButton variant="quiet">Delete</SubmitButton>
+                                  <SubmitButton variant="quiet">Remove completely</SubmitButton>
                                 </ActionForm>
                               )}
                               {roster.length > 1 && (

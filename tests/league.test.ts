@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/db";
-import { activityLog, leagues, picks, players, races, seasons } from "@/db/schema";
+import { activityLog, leagues, picks, players, races, seasons, users } from "@/db/schema";
 import {
   addPlayer,
   createEmailInvite,
@@ -204,14 +204,21 @@ describe("roles", () => {
   });
 });
 
-describe("placeholder profiles", () => {
-  it("can be deleted only while nobody has signed in to them", async () => {
-    const t = await addPlayer(db, tomas.id, "Tomas");
-    const { deletePlaceholder } = await import("@/lib/league");
-    await deletePlaceholder(db, tomas.id, t.id);
+describe("removing someone completely", () => {
+  it("deletes the profile, their teams and their sign-in, but never yourself", async () => {
+    const t = await addPlayer(db, tomas.id, "Placeholder");
+    const { removePlayer } = await import("@/lib/league");
+    await removePlayer(db, tomas.id, t.id);
     expect(await unclaimedPlayers(db, leagueId)).toHaveLength(0);
+
+    const u = await makeUser(db, "shayna@example.com");
+    const s = await joinAsNewPlayer(db, u, code, "League name");
+    await removePlayer(db, tomas.id, s.id);
+    expect(await db.select().from(players).where(eq(players.id, s.id))).toHaveLength(0);
+    expect(await db.select().from(users).where(eq(users.id, u.id))).toHaveLength(0);
+
     const me = await getPlayerForUser(db, tomas.id);
-    await expect(deletePlaceholder(db, tomas.id, me!.id)).rejects.toThrow(/Deactivate/);
+    await expect(removePlayer(db, tomas.id, me!.id)).rejects.toThrow(/yourself/);
   });
 });
 
