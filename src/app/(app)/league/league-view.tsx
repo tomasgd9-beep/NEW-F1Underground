@@ -195,6 +195,10 @@ function RaceView({
               · teams are hidden until the deadline. {done.size} of {data.players.length} saved.
             </span>
           </p>
+          <div className="flex border-b border-line px-3 py-1 text-xs font-semibold text-muted">
+            Player
+            <span className="ml-auto">Team saved for {race.label}?</span>
+          </div>
           <ul className="divide-y divide-line">
             {data.players.map((p) => (
               <li
@@ -203,7 +207,7 @@ function RaceView({
               >
                 {p.name}
                 <span className={`ml-auto ${done.has(p.id) ? "text-up" : "text-muted"}`}>
-                  {done.has(p.id) ? "✓ team saved" : "not yet"}
+                  {done.has(p.id) ? "✓ Saved" : "Not yet"}
                 </span>
               </li>
             ))}
