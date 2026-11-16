@@ -90,6 +90,24 @@ runs on GitHub. It needs the database address:
 
 If a run fails, Admin → Race control shows the error under "Last sync".
 
+### A reliable timer (recommended)
+
+GitHub often runs "every 15 minutes" jobs hours late. To keep locks, scores and
+emails on time, have a free outside timer call the site every 5 minutes:
+
+1. Make up a long random password (for example from a password manager).
+2. Vercel → the project → **Settings → Environment Variables** → add
+   `JOB_SECRET` with that value → **Save** → redeploy (Deployments → ⋯ → Redeploy).
+3. cron-job.org → free account → **Create cronjob**:
+   - URL: `https://new-f1-underground.vercel.app/api/job`
+   - Schedule: every 5 minutes
+   - **Advanced → Headers**: name `Authorization`, value `Bearer ` followed by the
+     same password (one space after Bearer)
+   - Save, then **Test run**: it should answer `{"ok":true,...}`.
+
+The GitHub job can stay on as a backup. As a last resort, the first page visit
+after a deadline also locks the race.
+
 ## Trying it on your own computer (optional, no accounts needed)
 
 1. Install Node.js (the "LTS" button on nodejs.org) once.

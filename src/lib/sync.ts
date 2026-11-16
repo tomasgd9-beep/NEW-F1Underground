@@ -208,13 +208,37 @@ export async function lockRace(
   if (race.lockedAt) return null;
   if (!opts.force && (!race.deadline || race.deadline > now)) return null;
 
-  const [season] = await db.select().from(seasons).where(eq(seasons.id, race.seasonId));
-  const budget = num(season.budget);
-  const cap = num(season.doubleCap);
   const assets = await teamAssets(db, race);
   if (!assets.some((a) => a.price > 0)) {
     throw new Error(`No prices for ${race.label} yet, so teams can't be auto-filled. Import prices on Admin.`);
   }
+  // Claim the lock first, so two runs at the same moment (schedule, a page visit, Lock now)
+  // can't both fill teams. If anything below fails, the claim is released.
+  const claimed = await db
+    .update(races)
+    .set({ lockedAt: now })
+    .where(and(eq(races.id, race.id), isNull(races.lockedAt)))
+    .returning({ id: races.id });
+  if (!claimed.length) return null;
+  try {
+    return await fillAndFreeze(db, race, assets, xpByFft, now, opts);
+  } catch (e) {
+    await db.update(races).set({ lockedAt: null }).where(eq(races.id, race.id));
+    throw e;
+  }
+}
+
+async function fillAndFreeze(
+  db: Db,
+  race: Race,
+  assets: Awaited<ReturnType<typeof teamAssets>>,
+  xpByFft: Record<string, number> | null,
+  now: Date,
+  opts: { rng?: () => number; actor?: string },
+): Promise<LockSummary> {
+  const [season] = await db.select().from(seasons).where(eq(seasons.id, race.seasonId));
+  const budget = num(season.budget);
+  const cap = num(season.doubleCap);
 
   // Expected points per app asset id; falls back to season points (as the sheet did).
   const fftOf = new Map<string, string>();
@@ -319,7 +343,6 @@ export async function lockRace(
   }
 
   await db.update(assetPrices).set({ frozenAt: now }).where(and(eq(assetPrices.raceId, race.id), isNull(assetPrices.frozenAt)));
-  await db.update(races).set({ lockedAt: now }).where(eq(races.id, race.id));
   return summary;
 }
 
