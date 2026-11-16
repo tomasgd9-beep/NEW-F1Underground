@@ -244,6 +244,10 @@ export default async function Admin() {
               <span className="text-sm text-muted">Sends a test email to {v.email}.</span>
               <SubmitButton variant="quiet">Send me a test email</SubmitButton>
             </ActionForm>
+            <ActionForm action={act.sampleReminder} className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted">The 24-hour reminder for the next race, as everyone will get it.</span>
+              <SubmitButton variant="quiet">Send me a sample reminder</SubmitButton>
+            </ActionForm>
           </Card>
         )}
 

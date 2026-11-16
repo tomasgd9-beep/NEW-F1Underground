@@ -81,6 +81,28 @@ export function canEmail() {
   return !!process.env.EMAIL_SERVER || (process.env.DATABASE_URL ?? "").startsWith("pglite:");
 }
 
+/** The reminder email itself (also used by Admin's "send me a sample"). */
+export function reminderEmail(
+  name: string,
+  race: { label: string; name: string },
+  deadline: Date,
+  saved: boolean,
+  now = new Date(),
+) {
+  const hours = Math.max(1, Math.round((deadline.getTime() - now.getTime()) / 3600_000));
+  const url = `${appUrl()}/team`;
+  const status = saved
+    ? "Your team is saved; you can still change it until the deadline."
+    : "You haven't saved a team yet. If you don't, you'll get a random one.";
+  return {
+    subject: `${race.label}: teams lock in ${hours} h`,
+    text: `Hi ${name},\n\n${race.name} teams lock ${etTime(deadline)} (in about ${hours} hours).\n${status}\n\n${url}\n`,
+    html:
+      `<p>Hi ${escapeHtml(name)},</p><p><b>${escapeHtml(race.name)}</b> teams lock <b>${etTime(deadline)}</b> (in about ${hours} hours).</p>` +
+      `<p>${status}</p><p><a href="${url}">Open My team</a></p>`,
+  };
+}
+
 /** Reminder to every signed-in player once the next deadline is less than 24 hours away. */
 export async function sendDeadlineReminders(db: Db, now = new Date()) {
   if (!canEmail()) return 0;
@@ -102,20 +124,8 @@ export async function sendDeadlineReminders(db: Db, now = new Date()) {
       .where(and(eq(picks.playerId, r.playerId), eq(picks.raceId, race.id)))
       .limit(1);
     if (!(await claim(db, r.playerId, race.id, "24h"))) continue;
-    const hours = Math.max(1, Math.round((deadline.getTime() - now.getTime()) / 3600_000));
-    const url = `${appUrl()}/team`;
-    const status = saved
-      ? "Your team is saved; you can still change it until the deadline."
-      : "You haven't saved a team yet. If you don't, you'll get a random one.";
-    await deliver(db, r.playerId, race.id, "24h", () =>
-      sendMail(
-        r.email,
-        `${race.label}: teams lock in ${hours} h`,
-        `Hi ${r.name},\n\n${race.name} teams lock ${etTime(deadline)} (in about ${hours} hours).\n${status}\n\n${url}\n`,
-        `<p>Hi ${escapeHtml(r.name)},</p><p><b>${escapeHtml(race.name)}</b> teams lock <b>${etTime(deadline)}</b> (in about ${hours} hours).</p>` +
-          `<p>${status}</p><p><a href="${url}">Open My team</a></p>`,
-      ),
-    );
+    const mail = reminderEmail(r.name, race, deadline, !!saved, now);
+    await deliver(db, r.playerId, race.id, "24h", () => sendMail(r.email, mail.subject, mail.text, mail.html));
     sent++;
   }
   if (sent) await logActivity(db, "job", "reminders_sent", { race: race.label, sent });

@@ -5,7 +5,11 @@ import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import type { ActionResult } from "@/components/action-form";
 import * as league from "@/lib/league";
+import { and, eq } from "drizzle-orm";
+import { picks } from "@/db/schema";
 import { sendInviteEmail, sendMail } from "@/lib/mail";
+import { reminderEmail } from "@/lib/notify";
+import { upcomingRace } from "@/lib/races";
 import { requireViewer } from "@/lib/session";
 
 /** Run a league operation and turn rule errors into a message for the form. */
@@ -131,6 +135,29 @@ export async function testEmail(): Promise<ActionResult> {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { error: `Sending failed: ${msg}` };
+  }
+}
+
+/** Commissioner: the real 24-hour reminder for the next race, sent only to yourself (nothing is recorded). */
+export async function sampleReminder(): Promise<ActionResult> {
+  const v = await requireViewer();
+  if (!v.isCommissioner) return { error: "Only commissioners can do that." };
+  if (!v.email || !v.player) return { error: "Your account has no email address." };
+  const player = v.player;
+  const db = getDb();
+  const race = await upcomingRace(db);
+  if (!race?.deadline) return { error: "No upcoming race with a deadline yet." };
+  const [saved] = await db
+    .select({ id: picks.id })
+    .from(picks)
+    .where(and(eq(picks.playerId, player.id), eq(picks.raceId, race.id)))
+    .limit(1);
+  const mail = reminderEmail(player.displayName, race, race.deadline, !!saved, new Date(race.deadline.getTime() - 24 * 3600_000));
+  try {
+    await sendMail(v.email, mail.subject, mail.text, mail.html);
+    return { ok: `Sample reminder sent to ${v.email}.` };
+  } catch (e) {
+    return { error: `Sending failed: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
 
