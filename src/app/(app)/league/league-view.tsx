@@ -427,7 +427,7 @@ function ChipDetail({
       <div aria-hidden className="md:hidden" style={{ height: sheetH }} />
       <div
         ref={sheetRef}
-        className="fixed inset-x-0 bottom-[calc(41px+env(safe-area-inset-bottom))] z-30 border-t border-line bg-card p-3 shadow-lg md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-lg md:hidden"
       >
         {body}
       </div>

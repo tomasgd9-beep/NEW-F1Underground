@@ -33,18 +33,18 @@ export function TopTabs() {
   );
 }
 
-/** Tabs pinned to the bottom on phones. */
-export function BottomTabs() {
+/** Tabs on phones: a second row of the top bar, under "F1 Underground". */
+export function PhoneTabs() {
   const path = usePathname();
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-navy grid grid-cols-4 border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
+    <nav className="md:hidden grid grid-cols-4 border-t border-white/10">
       {TABS.map((t) => {
         const on = path.startsWith(t.href);
         return (
           <Link
             key={t.href}
             href={t.href}
-            className={`py-2.5 text-center text-xs font-semibold ${on ? "text-white" : "text-white/60"}`}
+            className={`py-2 text-center text-xs font-semibold ${on ? "text-white" : "text-white/60"}`}
           >
             <span className={`inline-block pb-0.5 border-b-2 ${on ? "border-red" : "border-transparent"}`}>
               {t.label}

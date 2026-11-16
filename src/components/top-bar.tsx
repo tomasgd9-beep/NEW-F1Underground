@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { signOut } from "@/auth";
 import { Countdown } from "./countdown";
-import { TopTabs } from "./nav";
+import { PhoneTabs, TopTabs } from "./nav";
 
 type Race = { label: string; name: string; deadline: Date | null } | undefined;
 
 /** The one slim bar: league name, tabs, next race + countdown, sign out. */
 export function TopBar({ race, playerName }: { race: Race; playerName?: string }) {
   return (
-    <header className="sticky top-0 z-20 bg-navy text-white">
+    <header id="top-bar" className="sticky top-0 z-20 bg-navy text-white">
       <div className="mx-auto max-w-6xl h-12 px-3 flex items-center gap-4">
         <Link href="/team" className="font-bold tracking-tight whitespace-nowrap">
           <span className="text-red">F1</span> Underground
@@ -37,6 +37,7 @@ export function TopBar({ race, playerName }: { race: Race; playerName?: string }
           )}
         </div>
       </div>
+      <PhoneTabs />
     </header>
   );
 }

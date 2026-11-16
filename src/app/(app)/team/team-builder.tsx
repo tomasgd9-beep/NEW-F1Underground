@@ -70,8 +70,10 @@ export function TeamBuilder({
     const el = summaryRef.current;
     if (!el) return;
     // Show the pinned bar as soon as any part of the real one slides under the top bar.
-    const io = new IntersectionObserver(([e]) => setDock(e.intersectionRatio < 1 && e.boundingClientRect.top < 80), {
-      rootMargin: "-56px 0px 0px 0px",
+    // The top bar is taller on phones (it holds the tabs), so measure it.
+    const barH = document.getElementById("top-bar")?.offsetHeight ?? 48;
+    const io = new IntersectionObserver(([e]) => setDock(e.intersectionRatio < 1 && e.boundingClientRect.top < barH + 24), {
+      rootMargin: `-${barH + 8}px 0px 0px 0px`,
       threshold: [0, 0.25, 0.5, 0.75, 1],
     });
     io.observe(el);
@@ -168,7 +170,7 @@ export function TeamBuilder({
   return (
     <div className="grid gap-3 lg:grid-cols-[380px_1fr] lg:items-start">
       {/* ───────── Builder ───────── */}
-      <section ref={builderRef} className="scroll-mt-14 rounded-lg border border-line bg-card lg:sticky lg:top-15">
+      <section ref={builderRef} className="scroll-mt-24 md:scroll-mt-14 rounded-lg border border-line bg-card lg:sticky lg:top-15">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-line px-3 py-2">
           <h1 className="font-bold">
             {race.label} · {race.name}
@@ -315,7 +317,7 @@ export function TeamBuilder({
 
       {/* Phones: once the price and Save button scroll out of view, keep a copy pinned above the tabs. */}
       {!locked && dock && (
-        <div className="fixed inset-x-0 bottom-[calc(41px+env(safe-area-inset-bottom))] z-10 border-t border-line bg-card shadow-[0_-2px_8px_rgba(0,0,0,.08)] md:bottom-0 lg:hidden">
+        <div className="fixed inset-x-0 bottom-0 pb-[env(safe-area-inset-bottom)] z-10 border-t border-line bg-card shadow-[0_-2px_8px_rgba(0,0,0,.08)] lg:hidden">
           <div className="mx-auto flex max-w-6xl items-center gap-3 px-3 py-2">
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline justify-between gap-2 text-sm">
@@ -349,7 +351,7 @@ export function TeamBuilder({
 
       {/* ───────── Asset list ───────── */}
       {!locked && (
-        <section ref={listRef} className="scroll-mt-14 rounded-lg border border-line bg-card">
+        <section ref={listRef} className="scroll-mt-24 md:scroll-mt-14 rounded-lg border border-line bg-card">
           <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
             <div className="flex overflow-hidden rounded border border-line text-sm font-semibold">
               {(["driver", "constructor"] as const).map((k) => (
