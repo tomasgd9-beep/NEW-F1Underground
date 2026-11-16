@@ -224,7 +224,6 @@ function RaceView({
   const ranks = shareRanks(rows, (a, b) => (a.score?.total ?? 0) === (b.score?.total ?? 0));
   const holders = (assetId: string) =>
     rows.filter((r) => r.team!.picks.some((p) => p.assetId === assetId)).map((r) => r.pid);
-  const highlight = chip ? new Set(holders(chip.assetId)) : null;
 
   return (
     <section className="grid gap-2" onClick={() => chip?.pinned && setChip(null)}>
@@ -237,18 +236,18 @@ function RaceView({
         <ul className="divide-y divide-line">
           {rows.map((r, i) => {
             const team = r.team!;
+            // Drivers by points, high to low (×2 counted doubled), then the constructor.
             const chips = team.picks
               .map((p) => ({ ...p, v: (pts[p.assetId] ?? 0) * (p.slot === "x2" ? 2 : 1), a: data.assets[p.assetId] }))
-              .sort((a, b) => b.v - a.v);
+              .sort((a, b) => Number(a.slot === "c") - Number(b.slot === "c") || b.v - a.v);
             const me = r.pid === data.meId;
-            const lit = highlight?.has(r.pid);
             return (
               <li
                 key={r.pid}
                 id={`p-${r.pid}`}
                 className={`grid grid-cols-[2rem_1fr_auto] items-center gap-x-2 gap-y-1 px-3 py-1.5 md:grid-cols-[2rem_9rem_4rem_2.5rem_1fr] ${
                   me ? "bg-red/5" : ""
-                } ${lit ? "outline-2 -outline-offset-2 outline-red" : ""} ${focusPlayer === r.pid ? "bg-navy/5" : ""}`}
+                } ${focusPlayer === r.pid ? "bg-navy/5" : ""}`}
               >
                 <span className="text-sm font-bold text-muted">{ranks[i]}</span>
                 <span className="truncate text-sm font-semibold">
@@ -268,32 +267,43 @@ function RaceView({
                 <span className="hidden text-xs md:block">
                   <Move m={moveOf(r.pid)} />
                 </span>
-                <div className="col-span-3 flex flex-wrap gap-1 md:col-span-1">
-                  {chips.map((c) => (
-                    <button
-                      key={c.assetId}
-                      type="button"
-                      onMouseEnter={(e) => {
-                        if (chip?.pinned || !window.matchMedia("(hover: hover)").matches) return;
-                        const b = e.currentTarget.getBoundingClientRect();
-                        setChip({ assetId: c.assetId, playerId: r.pid, pinned: false, x: b.left, y: b.bottom });
-                      }}
-                      onMouseLeave={() => chip && !chip.pinned && setChip(null)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const b = e.currentTarget.getBoundingClientRect();
-                        setChip({ assetId: c.assetId, playerId: r.pid, pinned: true, x: b.left, y: b.bottom });
-                      }}
-                      className={`flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs ${
-                        chip?.assetId === c.assetId ? "border-red bg-red/10" : "border-line"
-                      }`}
-                    >
-                      <span className="h-3 w-0.5 rounded" style={{ background: c.a?.colour }} />
-                      <b>{c.a?.ticker ?? "?"}</b>
-                      <span className={neg(c.v)}>{f(c.v)}</span>
-                      {c.slot === "x2" && <span className="rounded bg-red px-0.5 text-[9px] font-bold text-white">×2</span>}
-                    </button>
-                  ))}
+                <div className="col-span-3 flex items-center gap-1 md:col-span-1">
+                  <div className="grid flex-1 grid-cols-6 gap-1 md:max-w-[34rem]">
+                    {chips.map((c) => {
+                      const on = chip?.assetId === c.assetId;
+                      const colour = c.a?.colour ?? "#888888";
+                      return (
+                        <button
+                          key={c.assetId + c.slot}
+                          type="button"
+                          onMouseEnter={(e) => {
+                            if (chip?.pinned || !window.matchMedia("(hover: hover)").matches) return;
+                            const b = e.currentTarget.getBoundingClientRect();
+                            setChip({ assetId: c.assetId, playerId: r.pid, pinned: false, x: b.left, y: b.bottom });
+                          }}
+                          onMouseLeave={() => chip && !chip.pinned && setChip(null)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const b = e.currentTarget.getBoundingClientRect();
+                            setChip({ assetId: c.assetId, playerId: r.pid, pinned: true, x: b.left, y: b.bottom });
+                          }}
+                          style={{
+                            borderLeftColor: colour,
+                            ...(on ? { background: `${colour}26`, boxShadow: `inset 0 0 0 1px ${colour}` } : {}),
+                          }}
+                          className={`relative flex min-w-0 flex-col items-start rounded-sm border-l-[3px] bg-black/[.03] px-1.5 py-0.5 text-left leading-tight transition-opacity md:flex-row md:items-center md:justify-between md:gap-1 dark:bg-white/[.05] ${
+                            c.slot === "c" ? "col-start-6" : ""
+                          }`}
+                        >
+                          <span className="flex items-center gap-0.5 text-xs font-bold">
+                            {c.a?.ticker ?? "?"}
+                            {c.slot === "x2" && <span className="text-[9px] font-bold text-red">×2</span>}
+                          </span>
+                          <span className={`text-xs tabular-nums ${neg(c.v)}`}>{f(c.v)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                   {team.penalty < 0 && (
                     <span className="rounded bg-down/10 px-1.5 py-0.5 text-xs font-semibold text-down">{team.penalty}</span>
                   )}
