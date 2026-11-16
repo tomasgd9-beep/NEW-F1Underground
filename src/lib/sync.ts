@@ -98,7 +98,11 @@ async function upsertAssets(db: Db, live: FftLive, currentRaceId: number) {
     const [person] = await db
       .insert(people)
       .values({ ticker: d.abbreviation, fullName: DRIVER_NAMES[d.abbreviation] ?? d.abbreviation })
-      .onConflictDoUpdate({ target: people.ticker, set: { ticker: d.abbreviation } })
+      .onConflictDoUpdate({
+        target: people.ticker,
+        // Fill in a full name we didn't know before; never overwrite one a commissioner set.
+        set: { fullName: sql`case when ${people.fullName} = ${people.ticker} then excluded.full_name else ${people.fullName} end` },
+      })
       .returning({ id: people.id });
     const consId = consByFft.get(d.constructorId ?? "");
     if (!consId) continue;
