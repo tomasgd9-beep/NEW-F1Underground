@@ -69,9 +69,10 @@ export function TeamBuilder({
   useEffect(() => {
     const el = summaryRef.current;
     if (!el) return;
-    // Show the pinned bar only after the real one has scrolled up off screen.
-    const io = new IntersectionObserver(([e]) => setDock(!e.isIntersecting && e.boundingClientRect.top < 0), {
-      rootMargin: "-48px 0px 0px 0px",
+    // Show the pinned bar as soon as any part of the real one slides under the top bar.
+    const io = new IntersectionObserver(([e]) => setDock(e.intersectionRatio < 1 && e.boundingClientRect.top < 80), {
+      rootMargin: "-56px 0px 0px 0px",
+      threshold: [0, 0.25, 0.5, 0.75, 1],
     });
     io.observe(el);
     return () => io.disconnect();
@@ -440,7 +441,7 @@ function Group({
           <tr
             key={a.id}
             onClick={() => onTap(a)}
-            className={`cursor-pointer border-t border-line ${picked ? "bg-red/5" : "hover:bg-black/[.03] dark:hover:bg-white/[.04]"}`}
+            className={`cursor-pointer border-t border-line ${picked ? "bg-red/10 dark:bg-red/20" : "hover:bg-black/[.03] dark:hover:bg-white/[.04]"}`}
           >
             <td className="py-1.5 pl-3">
               <div className="flex items-center gap-2">
@@ -478,11 +479,13 @@ function Group({
                   e.stopPropagation();
                   onTap(a);
                 }}
-                className={`grid h-8 w-8 place-items-center rounded text-lg font-bold leading-none text-white ${
-                  picked ? "bg-muted" : "bg-navy dark:bg-white/20"
+                className={`grid h-8 w-8 place-items-center rounded text-lg font-bold leading-none ${
+                  picked
+                    ? "border-2 border-navy bg-white text-navy dark:border-white dark:bg-transparent dark:text-white"
+                    : "bg-navy text-white dark:bg-white dark:text-navy"
                 }`}
               >
-                {picked ? "−" : "+"}
+                {picked ? "×" : "+"}
               </button>
             </td>
           </tr>
