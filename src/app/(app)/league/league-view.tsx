@@ -225,7 +225,7 @@ function RaceView({
       <div className="rounded-lg border border-line bg-card">
         <p className="border-b border-line px-3 py-2 text-sm">
           <b>{race.name}</b>{" "}
-          <span className="text-muted">· tap a pick for its breakdown and who else has it (✕ to close)</span>
+          <span className="text-muted">· tap a pick for a breakdown of its details and who else has it</span>
         </p>
         <ul className="divide-y divide-line">
           {rows.map((r, i) => {
