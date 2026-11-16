@@ -64,6 +64,18 @@ export function TeamBuilder({
   const [active, setActive] = useState<Slot | null>(null);
   const listRef = useRef<HTMLElement>(null);
   const builderRef = useRef<HTMLElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const [dock, setDock] = useState(false);
+  useEffect(() => {
+    const el = summaryRef.current;
+    if (!el) return;
+    // Show the pinned bar only after the real one has scrolled up off screen.
+    const io = new IntersectionObserver(([e]) => setDock(!e.isIntersecting && e.boundingClientRect.top < 0), {
+      rootMargin: "-48px 0px 0px 0px",
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   // On phones and tablets the list sits below the team: jump between them.
   const stacked = () => typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
 
@@ -235,6 +247,7 @@ export function TeamBuilder({
           })}
         </ul>
 
+        <div ref={summaryRef}>
         {/* Cost bar */}
         <div className="border-t border-line px-3 py-2">
           <div className="flex items-baseline justify-between text-sm">
@@ -296,7 +309,42 @@ export function TeamBuilder({
             </button>
           )}
         </div>
+        </div>
       </section>
+
+      {/* Phones: once the price and Save button scroll out of view, keep a copy pinned above the tabs. */}
+      {!locked && dock && (
+        <div className="fixed inset-x-0 bottom-[calc(41px+env(safe-area-inset-bottom))] z-10 border-t border-line bg-card shadow-[0_-2px_8px_rgba(0,0,0,.08)] md:bottom-0 lg:hidden">
+          <div className="mx-auto flex max-w-6xl items-center gap-3 px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="whitespace-nowrap">
+                  Team <b>{fmt(price)}</b> <span className="text-muted">/ {budget}</span>
+                </span>
+                {penalty < 0 ? (
+                  <span className="truncate font-semibold text-down">−{Math.abs(penalty)} pts</span>
+                ) : (
+                  <span className="truncate text-muted">{fmt(budget - price)} left</span>
+                )}
+              </div>
+              <div className="mt-1 h-1 overflow-hidden rounded bg-line">
+                <div
+                  className={`h-full ${penalty < 0 ? "bg-down" : "bg-navy dark:bg-white/70"}`}
+                  style={{ width: `${Math.min(100, (price / budget) * 100)}%` }}
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={save}
+              disabled={pending || !dirty || issues.length > 0}
+              className="shrink-0 rounded bg-red px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              {pending ? "Saving…" : dirty ? "Save team" : "Saved"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ───────── Asset list ───────── */}
       {!locked && (
@@ -360,6 +408,7 @@ export function TeamBuilder({
           {list.length === 0 && <p className="px-3 py-3 text-sm text-muted">Nothing matches “{query}”.</p>}
         </section>
       )}
+      {!locked && <div aria-hidden className="h-12 lg:hidden" />}
     </div>
   );
 }
