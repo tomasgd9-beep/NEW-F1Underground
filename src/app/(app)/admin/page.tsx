@@ -1,11 +1,12 @@
 import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { getDb } from "@/db";
-import { activityLog, invites, players, races, users } from "@/db/schema";
+import { activityLog, invites, picks, players, races, users } from "@/db/schema";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { CopyLink } from "@/components/copy-link";
 import { getLeague } from "@/lib/league";
-import { currentRace } from "@/lib/team";
+import { currentRace, rowToPicks, teamAssets } from "@/lib/team";
+import { budgetPenalty, emptySlots, teamPrice } from "@/lib/lineup";
 import { assetPrices } from "@/db/schema";
 import { appUrl } from "@/lib/mail";
 import { requireMember } from "@/lib/session";
@@ -81,6 +82,41 @@ export default async function Admin({
   ]);
 
   const race = await currentRace(db);
+  // Where each player's team stands for the current race (the column in Players).
+  const teamState = new Map<number, { label: string; tone: "ok" | "warn" | "bad" | "muted" }>();
+  if (race) {
+    const rows = await db.select().from(picks).where(eq(picks.raceId, race.id));
+    const byId = new Map((await teamAssets(db, race)).map((a) => [a.id, a]));
+    for (const p of roster) {
+      const row = rows.find((r) => r.playerId === p.id);
+      if (race.lockedAt) {
+        teamState.set(
+          p.id,
+          !row
+            ? { label: "No team", tone: "bad" }
+            : row.origin === "random"
+              ? { label: "Random team", tone: "warn" }
+              : row.origin === "auto_filled"
+                ? { label: "Own, auto-filled", tone: "warn" }
+                : { label: "Own team", tone: "ok" },
+        );
+        continue;
+      }
+      if (!row) {
+        teamState.set(p.id, { label: "Nothing saved yet", tone: "bad" });
+        continue;
+      }
+      const t = rowToPicks(row);
+      const empty = emptySlots(t).length;
+      const pen = budgetPenalty(teamPrice(t, byId), race.budget);
+      const bits = [empty ? `${empty} empty slot${empty > 1 ? "s" : ""}` : "", pen < 0 ? `over budget (${pen} pts)` : ""].filter(Boolean);
+      teamState.set(
+        p.id,
+        bits.length ? { label: `Saved, but ${bits.join(" and ")}`, tone: pen < 0 ? "bad" : "warn" } : { label: "✓ Ready", tone: "ok" },
+      );
+    }
+  }
+  const toneClass = { ok: "text-up font-semibold", warn: "text-amber-600 font-semibold dark:text-amber-400", bad: "text-down font-semibold", muted: "text-muted" };
   const [priceCount] = race
     ? await db.select({ n: sql<number>`count(*)::int` }).from(assetPrices).where(eq(assetPrices.raceId, race.id))
     : [{ n: 0 }];
@@ -141,7 +177,7 @@ export default async function Admin({
                 <tr>
                   <th className="py-1 pr-2 font-semibold">Name</th>
                   <th className="py-1 pr-2 font-semibold">Account</th>
-                  <th className="py-1 pr-2 font-semibold">From</th>
+                  {race && <th className="py-1 pr-2 font-semibold whitespace-nowrap">{race.label} team</th>}
                   {boss && <th className="py-1 font-semibold text-right">Manage</th>}
                 </tr>
               </thead>
@@ -156,7 +192,17 @@ export default async function Admin({
                     <td className="py-1.5 pr-2 text-muted">
                       {p.email ? (boss ? p.email : "signed in") : p.claimEmail ? "claim pending" : "not signed in yet"}
                     </td>
-                    <td className="py-1.5 pr-2 text-muted whitespace-nowrap">{p.joinedAt ?? "—"}</td>
+                    {race && (
+                      <td className="py-1.5 pr-2 text-xs">
+                        {(() => {
+                          const st = teamState.get(p.id);
+                          if (!st) return null;
+                          // Players see saved / not saved; the details are for commissioners.
+                          const label = boss || race.lockedAt ? st.label : st.tone === "bad" && st.label.startsWith("Nothing") ? st.label : "Saved";
+                          return <span className={boss || race.lockedAt ? toneClass[st.tone] : "text-muted"}>{label}</span>;
+                        })()}
+                      </td>
+                    )}
                     {boss && (
                       <td className="py-1.5">
                         <details className="text-right">
