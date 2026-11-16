@@ -5,8 +5,8 @@ import { activityLog, invites, picks, players, races, users } from "@/db/schema"
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { CopyLink } from "@/components/copy-link";
 import { getLeague } from "@/lib/league";
-import { currentRace, rowToPicks, teamAssets } from "@/lib/team";
-import { budgetPenalty, emptySlots, teamPrice } from "@/lib/lineup";
+import { currentRace, rowToPicks } from "@/lib/team";
+import { emptySlots } from "@/lib/lineup";
 import { assetPrices } from "@/db/schema";
 import { appUrl } from "@/lib/mail";
 import { requireMember } from "@/lib/session";
@@ -86,7 +86,6 @@ export default async function Admin({
   const teamState = new Map<number, { label: string; tone: "ok" | "warn" | "bad" | "muted" }>();
   if (race) {
     const rows = await db.select().from(picks).where(eq(picks.raceId, race.id));
-    const byId = new Map((await teamAssets(db, race)).map((a) => [a.id, a]));
     for (const p of roster) {
       const row = rows.find((r) => r.playerId === p.id);
       if (race.lockedAt) {
@@ -106,13 +105,12 @@ export default async function Admin({
         teamState.set(p.id, { label: "Nothing saved yet", tone: "bad" });
         continue;
       }
-      const t = rowToPicks(row);
-      const empty = emptySlots(t).length;
-      const pen = budgetPenalty(teamPrice(t, byId), race.budget);
-      const bits = [empty ? `${empty} empty slot${empty > 1 ? "s" : ""}` : "", pen < 0 ? `over budget (${pen} pts)` : ""].filter(Boolean);
+      // Only whether the team is complete: going over budget can be a deliberate gamble,
+      // so it isn't shown to anyone (commissioners play too) before the lock.
+      const empty = emptySlots(rowToPicks(row)).length;
       teamState.set(
         p.id,
-        bits.length ? { label: `Saved, but ${bits.join(" and ")}`, tone: pen < 0 ? "bad" : "warn" } : { label: "✓ Ready", tone: "ok" },
+        empty ? { label: `Saved, ${empty} empty slot${empty > 1 ? "s" : ""}`, tone: "warn" } : { label: "✓ Saved, complete", tone: "ok" },
       );
     }
   }
