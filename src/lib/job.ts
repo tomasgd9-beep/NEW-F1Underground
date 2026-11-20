@@ -3,7 +3,7 @@
 import type { Db } from "@/db";
 import { fetchExpectedPoints, fetchLive } from "@/lib/fft";
 import { logActivity } from "@/lib/league";
-import { alertCommissioners, sendDeadlineReminders, sendRaceSummaries } from "@/lib/notify";
+import { alertCommissioners, sendDeadlineReminders, sendLockNotices, sendRaceSummaries } from "@/lib/notify";
 import { runJob, type RunResult } from "@/lib/sync";
 
 export async function runScheduledJob(db: Db, actor = "job"): Promise<RunResult> {
@@ -21,6 +21,7 @@ export async function runScheduledJob(db: Db, actor = "job"): Promise<RunResult>
     // Emails never break the score update: a failure is logged and retried next run.
     for (const [what, send] of [
       ["reminders", sendDeadlineReminders],
+      ["lock notices", sendLockNotices],
       ["summaries", sendRaceSummaries],
     ] as const) {
       try {

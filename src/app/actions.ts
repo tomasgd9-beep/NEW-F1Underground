@@ -8,7 +8,7 @@ import * as league from "@/lib/league";
 import { eq } from "drizzle-orm";
 import { races } from "@/db/schema";
 import { sendInviteEmail, sendMail } from "@/lib/mail";
-import { reminderEmail, teamStatus } from "@/lib/notify";
+import { leagueReminderMessage, reminderEmail, teamStatus } from "@/lib/notify";
 import { upcomingRace } from "@/lib/races";
 import { requireViewer } from "@/lib/session";
 
@@ -148,12 +148,14 @@ export async function sampleReminder(): Promise<ActionResult> {
   const race = await upcomingRace(db);
   if (!race?.deadline) return { error: "No upcoming race with a deadline yet." };
   const [full] = await db.select().from(races).where(eq(races.id, race.id));
+  const at = new Date(race.deadline.getTime() - 24 * 3600_000);
   const mail = reminderEmail(
     player.displayName,
     race,
     race.deadline,
     await teamStatus(db, player.id, full),
-    new Date(race.deadline.getTime() - 24 * 3600_000),
+    at,
+    await leagueReminderMessage(db, player.leagueId, full, race.deadline, at),
   );
   try {
     await sendMail(v.email, mail.subject, mail.text, mail.html);

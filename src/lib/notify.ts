@@ -3,7 +3,7 @@
 // Each email goes out once per player per race (the reminders table remembers it).
 import { and, desc, eq, gt, isNotNull, sql } from "drizzle-orm";
 import type { Db } from "@/db";
-import { activityLog, leagues, players, races, reminders, seasons, users } from "@/db/schema";
+import { activityLog, leagues, picks, players, races, reminders, seasons, users } from "@/db/schema";
 import { loadLeague } from "@/lib/league-data";
 import { logActivity } from "@/lib/league";
 import { appUrl, escapeHtml, sendMail } from "@/lib/mail";
@@ -32,6 +32,7 @@ type Recipient = {
   leagueId: number;
   name: string;
   email: string;
+  role: string;
 };
 
 async function recipients(db: Db): Promise<Recipient[]> {
@@ -41,6 +42,7 @@ async function recipients(db: Db): Promise<Recipient[]> {
       leagueId: players.leagueId,
       name: players.displayName,
       email: users.email,
+      role: players.role,
     })
     .from(players)
     .innerJoin(users, eq(users.id, players.userId))
@@ -132,7 +134,9 @@ export function statusLines(t: TeamStatus): string[] {
     );
   }
   if (!out.length) {
-    out.push(`Your team is complete (${t.price.toFixed(2)} / ${t.budget}). You can still change it until the deadline.`);
+    out.push(
+      `Your team is complete (${t.price.toFixed(2)} / ${t.budget}). You can still change it until the deadline.`,
+    );
   }
   return out;
 }
@@ -144,19 +148,94 @@ export function reminderEmail(
   deadline: Date,
   status: TeamStatus,
   now = new Date(),
+  /** Commissioners also get a message to paste into the league's WhatsApp group. */
+  leagueMessage?: string,
 ) {
-  const hours = Math.max(1, Math.round((deadline.getTime() - now.getTime()) / 3600_000));
+  const hours = hoursUntil(deadline, now);
   const url = `${appUrl()}/team`;
   const lines = statusLines(status);
   const action = !status.saved || status.empty.length || status.penalty < 0 ? "Fix my team" : "Open My team";
+  const wa = leagueMessage ? whatsappBlock(leagueMessage) : { text: "", html: "" };
   return {
     subject: `F1 Underground deadline - ${race.label} locks in ${hours}hs`,
-    text: `Hi ${name},\n\n${race.name} teams lock ${etTime(deadline)} (in about ${hours} hours).\n${lines.join("\n")}\n\n${url}\n`,
+    text: `Hi ${name},\n\n${race.name} teams lock ${etTime(deadline)} (in about ${hours} hours).\n${lines.join("\n")}\n\n${url}\n${wa.text}`,
     html:
       `<p>Hi ${escapeHtml(name)},</p><p><b>${escapeHtml(race.name)}</b> teams lock <b>${etTime(deadline)}</b> (in about ${hours} hours).</p>` +
       lines.map((l) => `<p>${escapeHtml(l)}</p>`).join("") +
-      `<p><a href="${url}">${action}</a></p>`,
+      `<p><a href="${url}">${action}</a></p>` +
+      wa.html,
   };
+}
+
+function hoursUntil(deadline: Date, now: Date) {
+  return Math.max(1, Math.round((deadline.getTime() - now.getTime()) / 3600_000));
+}
+
+/** The part of a commissioner's email meant for the league chat: the message, ready to copy, and a WhatsApp button. */
+export function whatsappBlock(message: string) {
+  const wa = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  return {
+    text: `\n---\nFor the league WhatsApp (copy and paste):\n\n${message}\n\nOr open it in WhatsApp: ${wa}\n`,
+    html:
+      `<hr style="border:none;border-top:1px solid #ddd;margin:20px 0">` +
+      `<p style="margin:0 0 6px"><b>For the league WhatsApp</b> (copy and paste, or tap the button)</p>` +
+      `<div style="white-space:pre-wrap;background:#f4f4f4;border-radius:8px;padding:12px;font-family:inherit">${escapeHtml(message)}</div>` +
+      `<p><a href="${wa}" style="display:inline-block;background:#25D366;color:#fff;text-decoration:none;font-weight:bold;padding:8px 14px;border-radius:6px">Open in WhatsApp</a></p>`,
+  };
+}
+
+/** Active players of a league and their saved team (if any) for a race. */
+async function leagueTeams(db: Db, leagueId: number, raceId: number) {
+  const members = await db
+    .select({ id: players.id, name: players.displayName })
+    .from(players)
+    .where(and(eq(players.leagueId, leagueId), eq(players.active, true)))
+    .orderBy(players.displayName);
+  const rows = await db
+    .select({ playerId: picks.playerId, origin: picks.origin })
+    .from(picks)
+    .where(eq(picks.raceId, raceId));
+  return members.map((m) => ({ ...m, origin: rows.find((r) => r.playerId === m.id)?.origin ?? null }));
+}
+
+/** The group-chat message a day before the deadline: who still has to save a team (never budgets or picks). */
+export async function leagueReminderMessage(
+  db: Db,
+  leagueId: number,
+  race: { id: number; label: string; name: string },
+  deadline: Date,
+  now = new Date(),
+) {
+  const teams = await leagueTeams(db, leagueId, race.id);
+  const missing = teams.filter((t) => !t.origin).map((t) => t.name);
+  const lines = [
+    `⏰ F1 Underground: ${race.name} (${race.label}) teams lock ${etTime(deadline)}, in about ${hoursUntil(deadline, now)} hours.`,
+    missing.length
+      ? `✅ ${teams.length - missing.length} of ${teams.length} teams saved.\n⏳ Still to save: ${missing.join(", ")}.`
+      : `✅ Everyone has saved a team.`,
+    `No team at the deadline means a random one.`,
+    `Build yours: ${appUrl()}/team`,
+  ];
+  return lines.join("\n");
+}
+
+/** The group-chat message once teams are locked: how each team came about, and where to see the picks. */
+export async function leagueLockMessage(db: Db, leagueId: number, race: { id: number; label: string; name: string }) {
+  const teams = await leagueTeams(db, leagueId, race.id);
+  const names = (o: string | null) => teams.filter((t) => t.origin === o).map((t) => t.name);
+  const own = names("manual");
+  const auto = names("auto_filled");
+  const random = names("random");
+  const none = names(null);
+  const lines = [
+    `🔒 ${race.name} (${race.label}) teams are locked.`,
+    `✅ ${own.length} own team${own.length === 1 ? "" : "s"}`,
+    auto.length ? `🧩 Auto-filled empty slots: ${auto.join(", ")}` : "",
+    random.length ? `🎲 Random team: ${random.join(", ")}` : "",
+    none.length ? `⚠️ No team: ${none.join(", ")}` : "",
+    `Everyone's picks are now visible: ${appUrl()}/league`,
+  ].filter(Boolean);
+  return lines.join("\n");
 }
 
 /** Reminder to every signed-in player once the next deadline is less than 24 hours away. */
@@ -176,7 +255,9 @@ export async function sendDeadlineReminders(db: Db, now = new Date()) {
     if (await alreadySent(db, r.playerId, race.id, "24h")) continue;
     const status = await teamStatus(db, r.playerId, race);
     if (!(await claim(db, r.playerId, race.id, "24h"))) continue;
-    const mail = reminderEmail(r.name, race, deadline, status, now);
+    const forLeague =
+      r.role === "commissioner" ? await leagueReminderMessage(db, r.leagueId, race, deadline, now) : undefined;
+    const mail = reminderEmail(r.name, race, deadline, status, now, forLeague);
     await deliver(db, r.playerId, race.id, "24h", () => sendMail(r.email, mail.subject, mail.text, mail.html));
     sent++;
   }
@@ -259,6 +340,41 @@ export async function sendRaceSummaries(db: Db, now = new Date()) {
         race: race.label,
         sent,
       });
+  }
+  return sent;
+}
+
+/**
+ * Once a race's teams lock, each commissioner gets a short email with the message for
+ * the league chat. Only for races locked in the last 2 days, so imported history never triggers it.
+ */
+export async function sendLockNotices(db: Db, now = new Date()) {
+  if (!canEmail()) return 0;
+  const since = new Date(now.getTime() - 2 * DAY);
+  const locked = await db
+    .select()
+    .from(races)
+    .where(and(isNotNull(races.lockedAt), gt(races.lockedAt, since), gt(races.deadline, since)));
+  let sent = 0;
+  const bosses = (await recipients(db)).filter((r) => r.role === "commissioner");
+  for (const race of locked) {
+    for (const b of bosses) {
+      if (await alreadySent(db, b.playerId, race.id, "locked")) continue;
+      const message = await leagueLockMessage(db, b.leagueId, race);
+      if (!(await claim(db, b.playerId, race.id, "locked"))) continue;
+      const wa = whatsappBlock(message);
+      const when = etTime(race.lockedAt!);
+      await deliver(db, b.playerId, race.id, "locked", () =>
+        sendMail(
+          b.email,
+          `${race.label} teams locked`,
+          `Hi ${b.name},\n\n${race.name} teams locked at ${when}.\n${wa.text}`,
+          `<p>Hi ${escapeHtml(b.name)},</p><p><b>${escapeHtml(race.name)}</b> teams locked at ${when}.</p>${wa.html}`,
+        ),
+      );
+      sent++;
+    }
+    if (sent) await logActivity(db, "job", "lock_notices_sent", { race: race.label, sent });
   }
   return sent;
 }

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/db";
-import { players, races, seasons } from "@/db/schema";
+import { picks, players, races, seasons } from "@/db/schema";
 import { ensureBootstrapCommissioner, getLeague, joinAsNewPlayer } from "@/lib/league";
 import { makeUser, testDb } from "./helpers";
 
@@ -13,7 +13,7 @@ vi.mock("@/lib/mail", async (orig) => ({
     sent.push({ to, subject, text });
   },
 }));
-const { alertCommissioners, sendDeadlineReminders, sendRaceSummaries } = await import("@/lib/notify");
+const { alertCommissioners, sendDeadlineReminders, sendLockNotices, sendRaceSummaries } = await import("@/lib/notify");
 
 let db: Db;
 let seasonId: number;
@@ -41,6 +41,14 @@ describe("deadline reminders", () => {
     expect(sent.map((m) => m.to).sort()).toEqual(["a@example.com", "t@example.com"]);
     expect(sent[0].subject).toContain("R23 VEG");
     expect(sent[0].text).toContain("haven't saved a team");
+    // Only the commissioner gets the message for the league chat.
+    const boss = sent.find((m) => m.to === "t@example.com")!;
+    const ana = sent.find((m) => m.to === "a@example.com")!;
+    expect(boss.text).toContain("For the league WhatsApp");
+    expect(boss.text).toContain("0 of 3 teams saved");
+    expect(boss.text).toContain("Still to save: Ana, Paolo, Tomas");
+    expect(boss.text).toContain("https://wa.me/?text=");
+    expect(ana.text).not.toContain("WhatsApp");
     expect(await sendDeadlineReminders(db, now)).toBe(0); // already sent
     await db.update(races).set({ lockedAt: now }).where(eq(races.id, race.id));
   });
@@ -62,6 +70,33 @@ describe("race summaries", () => {
     expect(await sendRaceSummaries(db, new Date("2026-11-09T12:00:00Z"))).toBe(2);
     expect(sent[0].subject).toContain("R22 BRA");
     expect(await sendRaceSummaries(db, new Date("2026-11-09T13:00:00Z"))).toBe(0);
+  });
+});
+
+describe("lock notices", () => {
+  it("email commissioners the league message once, only for a race that just locked", async () => {
+    const [race] = await db
+      .insert(races)
+      .values({ seasonId, round: 21, label: "R23 VEG", name: "Las Vegas Grand Prix", deadline: new Date("2026-11-21T04:00:00Z") })
+      .returning();
+    const at = new Date("2026-11-21T04:05:00Z");
+    expect(await sendLockNotices(db, at)).toBe(0); // not locked yet
+    const ps = await db.select().from(players);
+    const id = (n: string) => ps.find((p) => p.displayName === n)!.id;
+    await db.insert(picks).values([
+      { playerId: id("Tomas"), raceId: race.id, origin: "manual" },
+      { playerId: id("Ana"), raceId: race.id, origin: "auto_filled" },
+      { playerId: id("Paolo"), raceId: race.id, origin: "random" },
+    ]);
+    await db.update(races).set({ lockedAt: at }).where(eq(races.id, race.id));
+    expect(await sendLockNotices(db, at)).toBe(1);
+    expect(sent[0].to).toBe("t@example.com");
+    expect(sent[0].subject).toBe("R23 VEG teams locked");
+    expect(sent[0].text).toContain("1 own team");
+    expect(sent[0].text).toContain("Auto-filled empty slots: Ana");
+    expect(sent[0].text).toContain("Random team: Paolo");
+    expect(await sendLockNotices(db, new Date(at.getTime() + 300_000))).toBe(0); // once
+    expect(await sendLockNotices(db, new Date(at.getTime() + 3 * 24 * 3600_000))).toBe(0);
   });
 });
 
