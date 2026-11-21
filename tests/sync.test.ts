@@ -39,6 +39,20 @@ beforeEach(async () => {
 });
 
 describe("syncing from f1fantasytools", () => {
+  it("numbers new races by the league's calendar, keeping cancelled rounds", async () => {
+    // As in the real 2026 import: Brazil is f1fantasytools round 20 but the league's R22.
+    await syncFromFft(db, fixture());
+    const [bra] = await db.select().from(s.races).where(eq(s.races.fftId, "2026_20"));
+    await db.update(s.races).set({ label: "R22 BRA" }).where(eq(s.races.id, bra.id));
+    // Vegas was created as "R21 VEG" before this fix; the next sync puts it in league numbering.
+    const res = await syncFromFft(db, fixture());
+    expect(res.next).toBe("R23 VEG");
+    // A label a commissioner chose is left alone.
+    const [veg] = await db.select().from(s.races).where(eq(s.races.fftId, "2026_21"));
+    await db.update(s.races).set({ label: "Vegas!" }).where(eq(s.races.id, veg.id));
+    expect((await syncFromFft(db, fixture())).next).toBe("Vegas!");
+  });
+
   it("creates the season, Brazil (final) and Vegas (next), assets and points", async () => {
     const res = await syncFromFft(db, fixture());
     expect(res).toMatchObject({ season: 2026, current: "R20 BRA", next: "R21 VEG", state: "final" });

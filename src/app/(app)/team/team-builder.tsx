@@ -37,7 +37,7 @@ function ago(iso: string, now: number) {
   if (m < 60) return `${m} min ago`;
   const h = Math.round(m / 60);
   if (h < 24) return `${h} h ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Toronto", month: "short", day: "numeric" });
 }
 
 export function TeamBuilder({
@@ -183,13 +183,15 @@ export function TeamBuilder({
             ) : deadline ? (
               <>
                 Deadline{" "}
-                {deadline.toLocaleString(undefined, {
+                {deadline.toLocaleString("en-CA", {
+                  timeZone: "America/Toronto",
                   weekday: "short",
                   month: "short",
                   day: "numeric",
                   hour: "numeric",
                   minute: "2-digit",
                 })}{" "}
+                ET{" "}
                 · <b className="text-ink"><Countdown deadline={race.deadline!} /></b>
               </>
             ) : (

@@ -1,6 +1,6 @@
 // The scheduled job's database work: keep races, assets and points in step
 // with f1fantasytools, lock teams at the deadline, and price the next race.
-import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import {
   assetPoints,
@@ -43,6 +43,25 @@ function visibleColour(hex?: string) {
 
 /* ───────────────────────────── Races ───────────────────────────── */
 
+/**
+ * The league numbers races by the original calendar, so cancelled rounds keep their number
+ * (2026: R4 and R5 were cancelled, so f1fantasytools' round 21 is the league's R23).
+ * A new race continues from the league label of the race before it in the season.
+ */
+async function leagueLabel(db: Db, seasonId: number, r: FftRace): Promise<string> {
+  const auto = raceLabel(r);
+  const [prev] = await db
+    .select({ round: races.round, label: races.label })
+    .from(races)
+    .where(and(eq(races.seasonId, seasonId), lt(races.round, r.roundNumber)))
+    .orderBy(desc(races.round))
+    .limit(1);
+  const m = prev?.label.match(/^R(\d+)/);
+  if (!prev || !m) return auto;
+  const n = Number(m[1]) + (r.roundNumber - prev.round);
+  return `R${String(n).padStart(2, "0")}${auto.slice(auto.indexOf(" "))}`;
+}
+
 async function upsertRace(db: Db, seasonId: number, r: FftRace, withStatus: boolean): Promise<Race> {
   const dl = deadlineOf(r);
   const times = Object.fromEntries(Object.entries(r.start_times ?? {}).filter(([, v]) => !!v)) as Record<string, string>;
@@ -56,10 +75,13 @@ async function upsertRace(db: Db, seasonId: number, r: FftRace, withStatus: bool
     ...(state ? { results: state, ...(state !== "none" && r.status?.race?.finished ? { status: "completed" as const } : {}) } : {}),
   };
   if (existing) {
+    // A label still in f1fantasytools' numbering (never renamed by a commissioner) follows the league's.
+    const relabel = existing.label === raceLabel(r) ? await leagueLabel(db, seasonId, r) : existing.label;
     const [u] = await db
       .update(races)
       .set({
         ...common,
+        ...(relabel !== existing.label ? { label: relabel } : {}),
         // A race the commissioner cancelled stays cancelled.
         ...(existing.status === "cancelled" ? { status: "cancelled" as const } : {}),
         ...(existing.deadlineManual || !dl ? {} : { deadline: dl.when }),
@@ -73,7 +95,7 @@ async function upsertRace(db: Db, seasonId: number, r: FftRace, withStatus: bool
     .values({
       seasonId,
       round: r.roundNumber,
-      label: raceLabel(r),
+      label: await leagueLabel(db, seasonId, r),
       fftId: r.id,
       deadline: dl?.when ?? null,
       ...common,
