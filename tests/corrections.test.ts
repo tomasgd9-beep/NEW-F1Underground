@@ -1,10 +1,19 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/db";
-import { assetPoints, constructors, people, races, seasons, stints } from "@/db/schema";
-import { clearPointsCorrection, setPoints, torontoToUtc, updateRace, utcToTorontoInput } from "@/lib/corrections";
+import { assetPoints, assetPrices, constructors, people, races, seasons, stints } from "@/db/schema";
+import {
+  clearPointsCorrection,
+  overridePrice,
+  setPoints,
+  setPricePeer,
+  torontoToUtc,
+  updateRace,
+  utcToTorontoInput,
+} from "@/lib/corrections";
+import { priceMissing } from "@/lib/sync";
 import { ensureBootstrapCommissioner } from "@/lib/league";
-import { currentRace } from "@/lib/team";
+import { currentRace, teamAssets } from "@/lib/team";
 import { makeUser, testDb } from "./helpers";
 
 let db: Db;
@@ -56,5 +65,54 @@ describe("points corrections", () => {
     await clearPointsCorrection(db, uid, r.id, `s${s.id}`);
     const [again] = await db.select().from(assetPoints).where(eq(assetPoints.raceId, r.id));
     expect(again.manual).toBe(false);
+  });
+});
+
+describe("prices", () => {
+  async function setup() {
+    const [r] = await db.insert(races).values({ seasonId, round: 22, label: "R24 QAT", name: "Qatar" }).returning();
+    const [red] = await db.insert(constructors).values({ ticker: "RED", name: "Red Bull" }).returning();
+    const [hasa] = await db.insert(constructors).values({ ticker: "HAA", name: "Haas" }).returning();
+    const [ver] = await db.insert(people).values({ ticker: "VER", fullName: "Max" }).returning();
+    const [oco] = await db.insert(people).values({ ticker: "OCO", fullName: "Esteban" }).returning();
+    await db.insert(stints).values([
+      { personId: ver.id, constructorId: red.id },
+      { personId: oco.id, constructorId: hasa.id },
+    ]);
+    const row = (personId: number | null, constructorId: number | null, price: number) => ({
+      raceId: r.id,
+      personId,
+      constructorId,
+      lastSeasonPrice: String(price),
+      formulaPrice: String(price),
+      finalPrice: String(price),
+      racesCounted: 3,
+    });
+    await db.insert(assetPrices).values([row(ver.id, null, 40), row(oco.id, null, 6.5), row(null, red.id, 60), row(null, hasa.id, 3)]);
+    return { r, hasa, ver, oco };
+  }
+  const priceOf = async (raceId: number, personId: number) =>
+    Number((await db.select().from(assetPrices).where(eq(assetPrices.raceId, raceId))).find((x) => x.personId === personId)?.finalPrice);
+
+  it("a substitute named mid-week gets a price right away: the floor, or their peer's", async () => {
+    const { r, hasa, oco } = await setup();
+    const [bea] = await db.insert(people).values({ ticker: "BEA", fullName: "Oliver" }).returning();
+    await db.insert(stints).values({ personId: bea.id, constructorId: hasa.id });
+    expect(await priceMissing(db, (await currentRace(db))!)).toBe(1);
+    expect(await priceOf(r.id, bea.id)).toBe(3); // cheapest price above 1
+    const res = await setPricePeer(db, uid, r.id, bea.id, oco.id);
+    expect(res.applied).toBe(true);
+    expect(await priceOf(r.id, bea.id)).toBe(6.5);
+  });
+
+  it("a one-off override changes this race only, and can be put back", async () => {
+    const { r, ver } = await setup();
+    const verAsset = (await teamAssets(db, (await currentRace(db))!)).find((a) => a.ticker === "VER")!;
+    await overridePrice(db, uid, r.id, verAsset.id, 33.33);
+    expect(await priceOf(r.id, ver.id)).toBe(33.33);
+    await overridePrice(db, uid, r.id, verAsset.id, null);
+    expect(await priceOf(r.id, ver.id)).toBe(40);
+    await db.update(races).set({ lockedAt: new Date() }).where(eq(races.id, r.id));
+    await expect(overridePrice(db, uid, r.id, verAsset.id, 30)).rejects.toThrow(/locked/);
   });
 });

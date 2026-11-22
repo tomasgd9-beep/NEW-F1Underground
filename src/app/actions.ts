@@ -294,6 +294,27 @@ export async function setPointsAction(_: ActionResult, f: FormData): Promise<Act
   });
 }
 
+export async function setPricePeerAction(_: ActionResult, f: FormData): Promise<ActionResult> {
+  return attempt(async () => {
+    const v = await commissionerOrError();
+    const { setPricePeer } = await import("@/lib/corrections");
+    const r = await setPricePeer(getDb(), v.userId, num(f, "raceId"), num(f, "personId"), num(f, "peerPersonId"));
+    return `${r.driver} takes ${r.peer}'s price${r.applied ? ", starting with this race" : " from the next race priced"}.`;
+  });
+}
+
+export async function overridePriceAction(_: ActionResult, f: FormData): Promise<ActionResult> {
+  return attempt(async () => {
+    const v = await commissionerOrError();
+    const { overridePrice } = await import("@/lib/corrections");
+    const clear = str(f, "clear") === "1";
+    const raw = str(f, "price").trim().replace(",", ".");
+    if (!clear && raw === "") throw new league.LeagueError("Type a price, or press Put formula price back.");
+    const p = await overridePrice(getDb(), v.userId, num(f, "raceId"), str(f, "assetId"), clear ? null : Number(raw));
+    return clear ? `Back to the formula price: ${p.toFixed(2)}.` : `Price set to ${p.toFixed(2)} for this race.`;
+  });
+}
+
 export async function clearPointsAction(_: ActionResult, f: FormData): Promise<ActionResult> {
   return attempt(async () => {
     const v = await commissionerOrError();

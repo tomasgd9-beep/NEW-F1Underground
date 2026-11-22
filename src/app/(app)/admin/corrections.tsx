@@ -1,9 +1,9 @@
 // Admin → Corrections: change a race's deadline or status, correct points, fix a locked team.
 // Choosing a race / driver / player is a plain link (?race=…), so the forms below come
 // pre-filled with what's saved now.
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { Db } from "@/db";
-import { assetPoints, players, races, seasons } from "@/db/schema";
+import { assetPoints, assetPrices, people, players, pricePeers, races, seasons } from "@/db/schema";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { utcToTorontoInput } from "@/lib/corrections";
 import { SLOTS, type Slot } from "@/lib/lineup";
@@ -47,6 +47,19 @@ export async function Corrections({
   const drivers = assets.filter((a) => a.kind === "driver").sort((a, b) => a.ticker.localeCompare(b.ticker));
   const cons = assets.filter((a) => a.kind === "constructor").sort((a, b) => a.ticker.localeCompare(b.ticker));
   const manual = pts.filter((p) => p.manual);
+  const overrides = await db
+    .select({ personId: assetPrices.personId, constructorId: assetPrices.constructorId, price: assetPrices.finalPrice })
+    .from(assetPrices)
+    .where(and(eq(assetPrices.raceId, race.id), sql`${assetPrices.overridePrice} is not null`));
+  const overridden = overrides
+    .map((o) => assets.find((a) => (o.personId ? a.personId === o.personId : a.id === `c${o.constructorId}`)))
+    .filter((a) => a != null);
+  const peerRows = await db
+    .select({ personId: pricePeers.personId, peerPersonId: pricePeers.peerPersonId })
+    .from(pricePeers)
+    .where(eq(pricePeers.seasonId, season.id));
+  const tickers = new Map((await db.select({ id: people.id, ticker: people.ticker }).from(people)).map((p) => [p.id, p.ticker]));
+  const people4 = drivers.filter((d) => d.personId != null);
   const q = (extra: Record<string, string | number>) =>
     "/admin?" + new URLSearchParams({ race: String(race.id), ...Object.fromEntries(Object.entries(extra).map(([k, v]) => [k, String(v)])) }) + "#corrections";
 
@@ -210,6 +223,83 @@ export async function Corrections({
           For a team that should be different (a save that didn&apos;t go through, say). Prices are this race&apos;s; the budget
           penalty is worked out again.
         </p>
+      </div>
+
+      {/* 4. Prices */}
+      <div className={sub}>
+        <h3 className="mb-1 font-semibold">Prices</h3>
+        {race.lockedAt ? (
+          <p className="text-xs text-muted">{race.label} is locked, so its prices are fixed. Pick the open race to change prices.</p>
+        ) : (
+          <>
+            <ActionForm action={act.overridePriceAction} className="flex flex-wrap items-end gap-2">
+              <input type="hidden" name="raceId" value={race.id} />
+              <label className="grid gap-0.5">
+                <span className="text-xs text-muted">Driver or team</span>
+                <select name="assetId" className={field} defaultValue="">
+                  <option value="" disabled>
+                    —
+                  </option>
+                  {[...drivers, ...cons].map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.ticker} {a.price.toFixed(2)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-0.5">
+                <span className="text-xs text-muted">Price for {race.label}</span>
+                <input name="price" inputMode="decimal" className={`${field} w-24`} placeholder="e.g. 12.50" />
+              </label>
+              <SubmitButton>Set price</SubmitButton>
+              <button name="clear" value="1" className="rounded border border-line px-2 py-1 text-xs font-semibold">
+                Put formula price back
+              </button>
+            </ActionForm>
+            <p className="mt-1 text-xs text-muted">
+              A one-off price for this race only; the formula carries on from the next race.
+              {overridden.length > 0 && <> Set by hand now: {overridden.map((a) => `${a.ticker} ${a.price.toFixed(2)}`).join(", ")}.</>}
+            </p>
+
+            <ActionForm action={act.setPricePeerAction} className="mt-3 flex flex-wrap items-end gap-2">
+              <input type="hidden" name="raceId" value={race.id} />
+              <label className="grid gap-0.5">
+                <span className="text-xs text-muted">New or substitute driver</span>
+                <select name="personId" className={field} defaultValue="">
+                  <option value="" disabled>
+                    —
+                  </option>
+                  {people4.map((d) => (
+                    <option key={d.id} value={d.personId}>
+                      {d.ticker} {d.price.toFixed(2)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-0.5">
+                <span className="text-xs text-muted">Starts at the price of</span>
+                <select name="peerPersonId" className={field} defaultValue="">
+                  <option value="" disabled>
+                    —
+                  </option>
+                  {people4.map((d) => (
+                    <option key={d.id} value={d.personId}>
+                      {d.ticker} {d.price.toFixed(2)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <SubmitButton>Save price peer</SubmitButton>
+            </ActionForm>
+            <p className="mt-1 text-xs text-muted">
+              A driver new to the league (a substitute, a rookie) starts at their peer&apos;s price instead of the cheapest
+              price. Drivers changing teams are picked up from f1fantasytools automatically.
+              {peerRows.length > 0 && (
+                <> This season: {peerRows.map((r) => `${tickers.get(r.personId)} ← ${tickers.get(r.peerPersonId)}`).join(", ")}.</>
+              )}
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

@@ -477,6 +477,43 @@ async function newcomers(db: Db, seasonId: number, priced: PriceRow[], floor: nu
   return out;
 }
 
+/**
+ * A driver or team that appears after the open race was priced (a substitute named mid-week)
+ * gets a price straight away: their price peer's, otherwise the cheapest price above 1.
+ * Only before the lock; returns how many were added.
+ */
+export async function priceMissing(db: Db, race: Race): Promise<number> {
+  if (race.lockedAt) return 0;
+  const rows = await db.select().from(assetPrices).where(eq(assetPrices.raceId, race.id));
+  if (!rows.length) return 0; // not priced yet: the normal pricing covers everyone
+  const priced: PriceRow[] = rows.map((r) => ({
+    personId: r.personId,
+    constructorId: r.constructorId,
+    lastSeasonPrice: num(r.lastSeasonPrice),
+    last3: num(r.last3),
+    racesCounted: r.racesCounted ?? 0,
+    formula: num(r.finalPrice),
+  }));
+  const flags = await activeFlags(db, priced);
+  const above = priced.filter((r, i) => flags[i] && r.formula > 1).map((r) => r.formula);
+  const floor = above.length ? Math.min(...above) : 1;
+  const extra = await newcomers(db, race.seasonId, priced, floor);
+  if (!extra.length) return 0;
+  await db.insert(assetPrices).values(
+    extra.map((r) => ({
+      raceId: race.id,
+      personId: r.personId,
+      constructorId: r.constructorId,
+      lastSeasonPrice: String(round2(r.lastSeasonPrice)),
+      last3: "0",
+      racesCounted: 0,
+      formulaPrice: String(round2(r.formula)),
+      finalPrice: String(round2(r.formula)),
+    })),
+  );
+  return extra.length;
+}
+
 /** Which rows are still racing (a person with an active stint, an active constructor). */
 async function activeFlags(db: Db, rows: PriceRow[]): Promise<boolean[]> {
   const persons = new Set(
@@ -693,6 +730,7 @@ export async function runJob(
     const { xp, source } = await xpForLock(db, cur, getXp);
     out.lock = await lockRace(db, cur, xp, { now, xpSource: source });
   } else if (cur) {
+    await priceMissing(db, cur);
     await captureXp(db, cur, getXp, now);
   }
 

@@ -3,10 +3,10 @@
 // Every change is logged in the activity log.
 import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "@/db";
-import { assetPoints, picks, players, races, seasons } from "@/db/schema";
+import { assetPrices, assetPoints, people, picks, players, pricePeers, races, seasons } from "@/db/schema";
 import { LeagueError, logActivity, requireCommissioner } from "@/lib/league";
 import { budgetPenalty, lineupIssues, parseAssetId, SLOTS, teamPrice, type AssetId, type Picks } from "@/lib/lineup";
-import { priceNextRace } from "@/lib/sync";
+import { priceMissing, priceNextRace } from "@/lib/sync";
 import { teamAssets, type Race } from "@/lib/team";
 
 /** "2026-11-20T23:00" typed on the Admin page, read as Toronto time. */
@@ -210,4 +210,85 @@ export async function fixTeam(db: Db, userId: string, raceId: number, playerId: 
     { race: race.label, player: pl.displayName, price, penalty: values.penalty },
     { leagueId: me.leagueId },
   );
+}
+
+/**
+ * A new or substitute driver starts at their price peer's price (CAM ← OCO), from now on
+ * and, if the open race isn't locked, for it too (unless its price was set by hand).
+ */
+export async function setPricePeer(db: Db, userId: string, raceId: number, personId: number, peerPersonId: number) {
+  const me = await requireCommissioner(db, userId);
+  const race = await raceById(db, raceId);
+  if (personId === peerPersonId) throw new LeagueError("Pick a different driver as the price peer.");
+  const [who] = await db.select().from(people).where(eq(people.id, personId));
+  const [peer] = await db.select().from(people).where(eq(people.id, peerPersonId));
+  if (!who || !peer) throw new LeagueError("Pick both drivers.");
+  await db
+    .insert(pricePeers)
+    .values({ personId, peerPersonId, seasonId: race.seasonId })
+    .onConflictDoUpdate({ target: pricePeers.personId, set: { peerPersonId, seasonId: race.seasonId } });
+  let applied = false;
+  if (!race.lockedAt) {
+    const [peerRow] = await db
+      .select()
+      .from(assetPrices)
+      .where(and(eq(assetPrices.raceId, race.id), eq(assetPrices.personId, peerPersonId)));
+    const [mine] = await db
+      .select()
+      .from(assetPrices)
+      .where(and(eq(assetPrices.raceId, race.id), eq(assetPrices.personId, personId)));
+    if (peerRow && mine && mine.overridePrice == null && (mine.racesCounted ?? 0) === 0) {
+      await db
+        .update(assetPrices)
+        .set({ lastSeasonPrice: peerRow.finalPrice, formulaPrice: peerRow.finalPrice, finalPrice: peerRow.finalPrice })
+        .where(eq(assetPrices.id, mine.id));
+      applied = true;
+    } else if (peerRow && !mine) {
+      applied = (await priceMissing(db, race)) > 0;
+    }
+  }
+  await logActivity(db, userId, "price_peer_set", { race: race.label, driver: who.ticker, peer: peer.ticker }, { leagueId: me.leagueId });
+  return { applied, driver: who.ticker, peer: peer.ticker };
+}
+
+/** A one-off price for one driver or team in a race that isn't locked yet; null puts the formula price back. */
+export async function overridePrice(db: Db, userId: string, raceId: number, assetId: AssetId, price: number | null) {
+  const me = await requireCommissioner(db, userId);
+  const race = await raceById(db, raceId);
+  if (race.lockedAt) throw new LeagueError(`${race.label} is locked; its prices can't change any more.`);
+  const a = parseAssetId(assetId);
+  if (!a) throw new LeagueError("Pick a driver or constructor.");
+  if (price != null && !(price > 0 && price < 1000)) throw new LeagueError("Type a price above 0.");
+  let personId: number | null = null;
+  if (a.kind === "driver") {
+    const asset = (await teamAssets(db, race)).find((x) => x.id === assetId);
+    if (!asset) throw new LeagueError("That driver isn't in this race.");
+    personId = asset.personId ?? null;
+  }
+  const where = and(
+    eq(assetPrices.raceId, race.id),
+    personId ? eq(assetPrices.personId, personId) : eq(assetPrices.constructorId, a.num),
+  );
+  const [row] = await db.select().from(assetPrices).where(where);
+  if (!row) throw new LeagueError("No price for that one in this race yet. Import or sync prices first.");
+  let final = price;
+  if (final == null) {
+    // Back to the formula, with the usual floor (the cheapest price above 1).
+    const all = await db.select().from(assetPrices).where(eq(assetPrices.raceId, race.id));
+    const above = all.filter((r) => r.id !== row.id && Number(r.finalPrice) > 1).map((r) => Number(r.finalPrice));
+    const f = Number(row.formulaPrice ?? row.finalPrice);
+    final = f > 1 ? f : above.length ? Math.min(...above) : 1;
+  }
+  await db
+    .update(assetPrices)
+    .set({ overridePrice: price == null ? null : String(price), finalPrice: String(Math.round(final * 100) / 100) })
+    .where(eq(assetPrices.id, row.id));
+  await logActivity(
+    db,
+    userId,
+    price == null ? "price_override_cleared" : "price_overridden",
+    { race: race.label, asset: assetId, price: final },
+    { leagueId: me.leagueId },
+  );
+  return final;
 }

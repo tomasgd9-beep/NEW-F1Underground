@@ -36,6 +36,8 @@ export type TeamAsset = LineupAsset & {
   last3: number;
   /** Price change since the previous race (null if there's no previous price). */
   move: number | null;
+  /** Drivers only: the person behind the stint (prices are per person). */
+  personId?: number;
 };
 
 /**
@@ -155,6 +157,7 @@ export async function teamAssets(db: Db, race: Race): Promise<TeamAsset[]> {
       colour: d.colour,
       price: p.now,
       move: p.move,
+      personId: d.personId,
       season: n(P.season.get(d.personId)),
       last3: n(P.last3.get(d.personId)),
     });
