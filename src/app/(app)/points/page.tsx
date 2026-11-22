@@ -60,15 +60,25 @@ export default async function PointsPage({ searchParams }: { searchParams: Promi
     .orderBy(desc(assetPoints.updatedAt))
     .limit(1);
   const [raceRow] = await db.select().from(races).where(eq(races.id, chosen.id));
+  // The whole season in the picker: races to come and cancelled ones are shown, greyed.
+  const allRaces = await db.select().from(races).where(eq(races.seasonId, season!.id)).orderBy(asc(races.round));
+  const pickerRaces = allRaces.map((r) => {
+    const scored = list.some((x) => x.id === r.id);
+    return {
+      id: r.id,
+      label: r.label,
+      name: r.name,
+      ...(scored
+        ? { href: `/points?season=${season!.id}&race=${r.id}` }
+        : { note: r.status === "cancelled" ? "cancelled" : "upcoming" }),
+    };
+  });
 
   return (
     <div className="grid gap-3">
       {header}
       <section className="flex flex-wrap items-center gap-2">
-        <RacePicker
-          races={[...list].reverse().map((r) => ({ ...r, href: `/points?season=${season!.id}&race=${r.id}` }))}
-          currentId={chosen.id}
-        />
+        <RacePicker races={pickerRaces} currentId={chosen.id} />
         <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase ${BADGE[chosen.results] ?? ""}`}>
           {chosen.results}
         </span>
@@ -85,7 +95,7 @@ export default async function PointsPage({ searchParams }: { searchParams: Promi
           </span>
         )}
       </section>
-      <PointsTable rows={rows} raceName={chosen.name} locked={!!raceRow?.lockedAt} />
+      <PointsTable rows={rows} raceName={chosen.name} raceLabel={chosen.label} locked={!!raceRow?.lockedAt} />
     </div>
   );
 }

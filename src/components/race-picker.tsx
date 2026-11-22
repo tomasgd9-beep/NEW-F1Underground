@@ -4,7 +4,8 @@
 import Link from "next/link";
 import { useRef } from "react";
 
-export type PickerRace = { id: number; label: string; name: string; href?: string };
+/** `note` marks a race that can't be opened yet or ever ("upcoming", "cancelled"). */
+export type PickerRace = { id: number; label: string; name: string; href?: string; note?: string };
 
 export function RacePicker({
   races,
@@ -33,8 +34,15 @@ export function RacePicker({
             <>
               <span className="w-16 shrink-0 font-semibold">{r.label}</span>
               <span className="truncate text-muted">{r.name}</span>
+              {r.note && <span className="ml-auto shrink-0 text-[10px] uppercase text-muted">{r.note}</span>}
             </>
           );
+          if (r.note)
+            return (
+              <div key={r.id} className={`${cls} cursor-default opacity-50 hover:bg-transparent dark:hover:bg-transparent`}>
+                {body}
+              </div>
+            );
           return r.href ? (
             <Link key={r.id} href={r.href} className={cls} onClick={close}>
               {body}

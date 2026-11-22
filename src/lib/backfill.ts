@@ -25,6 +25,9 @@ import { CONSTRUCTOR_NAMES, DRIVER_NAMES, type Breakdown } from "@/lib/fft";
 import { logActivity } from "@/lib/league";
 import { applyFloor, formulaPrice, round2 } from "@/lib/pricing";
 
+/** Colours for teams f1fantasytools no longer lists (it supplies the rest). */
+const PAST_COLOURS: Record<string, string> = { KCK: "#52E252" };
+
 export type HistoryFiles = { races: string; points: string; teams: string };
 
 type RaceRow = { round: number; label: string; name: string; country: string; sprint: boolean; times: Record<string, string> };
@@ -185,7 +188,12 @@ export async function backfillSeason(
     const [c] = await db
       .insert(constructors)
       // A team that only existed in a past season (Kick Sauber) is added as inactive.
-      .values({ ticker: t, name: CONSTRUCTOR_NAMES[t] ?? t, ...(opts.past ? { active: false } : {}) })
+      .values({
+        ticker: t,
+        name: CONSTRUCTOR_NAMES[t] ?? t,
+        ...(PAST_COLOURS[t] ? { colour: PAST_COLOURS[t] } : {}),
+        ...(opts.past ? { active: false } : {}),
+      })
       .onConflictDoUpdate({ target: constructors.ticker, set: { ticker: t } })
       .returning({ id: constructors.id });
     consId.set(t, c.id);

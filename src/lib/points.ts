@@ -14,8 +14,10 @@ export type PointsRow = {
   colour: string;
   parts: Breakdown;
   total: number | null;
+  /** Season and Last 3 as of this race (it and the races before it), and how many races it scored in. */
   season: number;
   last3: number;
+  races: number;
   picked: number | null;
   doubled: number | null;
   /** Who picked it (locked races only): as ×2 and as a regular pick. */
@@ -35,7 +37,8 @@ export async function scoredRaces(db: Db, seasonId: number) {
 export async function pointsForRace(db: Db, raceId: number, leagueId: number): Promise<PointsRow[]> {
   const [race] = await db.select().from(races).where(eq(races.id, raceId));
   if (!race) return [];
-  const seasonRaces = await scoredRaces(db, race.seasonId);
+  // As of this race: a past race shows the standings as they were after it.
+  const seasonRaces = (await scoredRaces(db, race.seasonId)).filter((r) => r.round <= race.round);
   const scoredIds = seasonRaces.map((r) => r.id);
   const last3Ids = scoredIds.slice(0, 3);
 
@@ -55,9 +58,11 @@ export async function pointsForRace(db: Db, raceId: number, leagueId: number): P
     : [];
   const seasonBy = new Map<string, number>();
   const last3By = new Map<string, number>();
+  const racesBy = new Map<string, Set<number>>();
   for (const p of all) {
     const k = p.personId ? `p${p.personId}` : `c${p.constructorId}`;
     seasonBy.set(k, (seasonBy.get(k) ?? 0) + n(p.total));
+    racesBy.set(k, (racesBy.get(k) ?? new Set()).add(p.raceId));
     if (last3Ids.includes(p.raceId)) last3By.set(k, (last3By.get(k) ?? 0) + n(p.total));
   }
 
@@ -122,6 +127,7 @@ export async function pointsForRace(db: Db, raceId: number, leagueId: number): P
         total: p.total == null ? null : n(p.total),
         season: seasonBy.get(`p${s.personId}`) ?? 0,
         last3: last3By.get(`p${s.personId}`) ?? 0,
+        races: racesBy.get(`p${s.personId}`)?.size ?? 0,
         picked: race.lockedAt ? pickCount.get(k) ?? 0 : null,
         doubled: race.lockedAt ? doubleCount.get(k) ?? 0 : null,
         pickedBy: race.lockedAt ? { x2: byX2.get(k) ?? [], x1: byX1.get(k) ?? [] } : null,
@@ -141,6 +147,7 @@ export async function pointsForRace(db: Db, raceId: number, leagueId: number): P
         total: p.total == null ? null : n(p.total),
         season: seasonBy.get(k) ?? 0,
         last3: last3By.get(k) ?? 0,
+        races: racesBy.get(k)?.size ?? 0,
         picked: race.lockedAt ? pickCount.get(k) ?? 0 : null,
         doubled: null,
         pickedBy: race.lockedAt ? { x2: [], x1: byX1.get(k) ?? [] } : null,

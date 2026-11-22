@@ -3,7 +3,8 @@
 import { Fragment, useMemo, useState } from "react";
 import type { PointsRow } from "@/lib/points";
 
-type SortKey = "total" | "season" | "last3" | "picked" | "doubled" | "ticker";
+/** A fixed column, or a session column as "<Session>:<label>". */
+type SortKey = "total" | "season" | "last3" | "races" | "picked" | "doubled" | "ticker" | `${string}:${string}`;
 
 const f = (n: number | null | undefined) => (n == null ? "–" : Number.isInteger(n) ? String(n) : n.toFixed(1));
 const neg = (n: number | null | undefined) => (n != null && n < 0 ? "text-down" : "");
@@ -18,7 +19,17 @@ const BRK = "hidden md:table-cell";
 const NAME = "hidden xl:inline";
 const STAT = "md:hidden lg:table-cell"; // Season, Last 3: phones and lg+
 
-export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; raceName: string; locked: boolean }) {
+export function PointsTable({
+  rows,
+  raceName,
+  raceLabel,
+  locked,
+}: {
+  rows: PointsRow[];
+  raceName: string;
+  raceLabel: string;
+  locked: boolean;
+}) {
   const [tab, setTab] = useState<"driver" | "constructor">("driver");
   const [sort, setSort] = useState<SortKey>("total");
   const [open, setOpen] = useState<string | null>(null);
@@ -26,22 +37,6 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
   const isDriver = tab === "driver";
   const hasSprint = rows.some((r) => r.parts.S);
 
-  const list = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    return rows
-      .filter((r) => r.kind === tab && (!s || r.ticker.toLowerCase().includes(s) || r.name.toLowerCase().includes(s)))
-      .sort((a, b) =>
-        sort === "ticker"
-          ? a.ticker.localeCompare(b.ticker)
-          : (b[sort] ?? -999) - (a[sort] ?? -999) || a.ticker.localeCompare(b.ticker),
-      );
-  }, [rows, tab, sort, q]);
-
-  const sortBtn = (k: SortKey, label: string) => (
-    <button type="button" onClick={() => setSort(k)} className={sort === k ? "text-ink underline" : ""}>
-      {label}
-    </button>
-  );
 
   // Session columns: [label, value getter, is the session's result column]
   type Col = { label: string; get: (r: PointsRow) => number | undefined; res?: boolean };
@@ -81,6 +76,32 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
     },
   ];
   const nBrk = groups.reduce((s, g) => s + g.cols.length, 0);
+
+  // Every column sorts, high to low (names A–Z).
+  const value = (r: PointsRow, k: SortKey): number | null | undefined => {
+    if (k.includes(":")) {
+      const [g, label] = k.split(":");
+      return groups.find((x) => x.name === g)?.cols.find((c) => c.label === label)?.get(r);
+    }
+    return r[k as "total" | "season" | "last3" | "races" | "picked" | "doubled"];
+  };
+  const list = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return rows
+      .filter((r) => r.kind === tab && (!s || r.ticker.toLowerCase().includes(s) || r.name.toLowerCase().includes(s)))
+      .sort((a, b) =>
+        sort === "ticker"
+          ? a.ticker.localeCompare(b.ticker)
+          : (value(b, sort) ?? -999) - (value(a, sort) ?? -999) || a.ticker.localeCompare(b.ticker),
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, tab, sort, q, hasSprint]);
+
+  const sortBtn = (k: SortKey, label: string, title?: string) => (
+    <button type="button" onClick={() => setSort(k)} title={title} className={sort === k ? "text-ink underline" : ""}>
+      {label}
+    </button>
+  );
 
   return (
     <section className="rounded-lg border border-line bg-card">
@@ -122,6 +143,7 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
               <th />
               <th className={STAT} />
               <th className={STAT} />
+              <th className={STAT} />
               {locked && (
                 <th
                   colSpan={isDriver ? 2 : 1}
@@ -139,13 +161,16 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
                     key={g.name + c.label}
                     className={`${BRK} px-1.5 text-right font-semibold ${gi % 2 ? "" : "bg-bg/60"} ${c.res ? "text-ink" : ""}`}
                   >
-                    {c.label}
+                    {sortBtn(`${g.name}:${c.label}`, c.label, `Sort by ${g.name} ${c.label}`)}
                   </th>
                 )),
               )}
               <th className="px-2 text-right font-semibold">{sortBtn("total", "Total")}</th>
               <th className={`${STAT} px-2 text-right font-semibold`}>{sortBtn("season", "Season")}</th>
               <th className={`${STAT} px-2 text-right font-semibold`}>{sortBtn("last3", "Last 3 races")}</th>
+              <th className={`${STAT} px-2 text-right font-semibold`}>
+                {sortBtn("races", "Races", "Races scored in this season, up to this race")}
+              </th>
               {locked && isDriver && <th className="px-2 text-right font-semibold">{sortBtn("doubled", "×2")}</th>}
               {locked && <th className="pr-3 text-right font-semibold">{sortBtn("picked", isDriver ? "×1" : "Teams")}</th>}
             </tr>
@@ -185,6 +210,7 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
                     <td className={`px-2 text-right font-bold ${neg(r.total)}`}>{f(r.total)}</td>
                     <td className={`${STAT} px-2 text-right ${neg(r.season)}`}>{f(r.season)}</td>
                     <td className={`${STAT} px-2 text-right ${neg(r.last3)}`}>{f(r.last3)}</td>
+                    <td className={`${STAT} px-2 text-right text-muted`}>{r.races}</td>
                     {locked && isDriver && (
                       <td className={`px-2 text-right ${r.doubled ? "font-semibold text-red" : "text-muted"}`}>{r.doubled}</td>
                     )}
@@ -192,7 +218,7 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
                   </tr>
                   {isOpen && (
                     <tr className="bg-black/[.03] dark:bg-white/[.04]">
-                      <td colSpan={nBrk + 4 + (locked ? (isDriver ? 2 : 1) : 0)} className="px-3 pb-2 text-xs">
+                      <td colSpan={nBrk + 5 + (locked ? (isDriver ? 2 : 1) : 0)} className="px-3 pb-2 text-xs">
                         <div className="mb-1 text-muted md:hidden">
                           {r.name}
                           {r.kind === "driver" && ` · ${r.team}`}
@@ -214,7 +240,7 @@ export function PointsTable({ rows, raceName, locked }: { rows: PointsRow[]; rac
       <p className="border-t border-line px-3 py-1.5 text-[11px] text-muted">
         <span className="md:hidden">Tap a row for the session breakdown and who picked it. </span>
         <span className="hidden md:inline">Click a row to see who picked it. </span>
-        Season and Last 3 races: points scored so far this season.
+        Season, Last 3 races and Races: as of {raceLabel} (this race and the ones before it). Every column header sorts.
         {locked
           ? isDriver
             ? " Picked by ×2 / ×1: how many players have them in their team this race, as their ×2 driver or as a regular pick."
