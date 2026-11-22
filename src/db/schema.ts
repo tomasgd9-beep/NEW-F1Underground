@@ -323,6 +323,32 @@ export const reminders = pgTable(
   (t) => [uniqueIndex("reminders_once").on(t.playerId, t.raceId, t.type)],
 );
 
+/**
+ * f1fantasytools' expected points for a race, one row each time the analyst simulation
+ * changed (Early, Post-FP2, Post-FP3…). The lock falls back to the latest one.
+ */
+export const xpSnapshots = pgTable(
+  "xp_snapshots",
+  {
+    id: serial("id").primaryKey(),
+    raceId: integer("race_id")
+      .notNull()
+      .references(() => races.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Expected points keyed by f1fantasytools id ("RED_VER", "RED"). */
+    xp: jsonb("xp").$type<Record<string, number>>().notNull(),
+    hash: text("hash").notNull(),
+    capturedAt: timestamp("captured_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("xp_snapshots_race").on(t.raceId, t.capturedAt)],
+);
+
+/** Small bits of state the scheduled job keeps between runs (e.g. when it last checked something). */
+export const jobState = pgTable("job_state", {
+  key: text("key").primaryKey(),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+});
+
 export const activityLog = pgTable(
   "activity_log",
   {

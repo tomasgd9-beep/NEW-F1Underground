@@ -1,4 +1,4 @@
-// One job run against f1fantasytools, shared by the 15-minute schedule and
+// One job run against f1fantasytools, shared by the 5-minute timer, GitHub's backup schedule and
 // the Admin "Sync now" button.
 import type { Db } from "@/db";
 import { fetchExpectedPoints, fetchLive } from "@/lib/fft";
@@ -9,7 +9,7 @@ import { runJob, type RunResult } from "@/lib/sync";
 export async function runScheduledJob(db: Db, actor = "job"): Promise<RunResult> {
   try {
     const live = await fetchLive();
-    const res = await runJob(db, live, async (round) => (await fetchExpectedPoints(round))?.xp ?? null);
+    const res = await runJob(db, live, (round) => fetchExpectedPoints(round));
     await logActivity(db, actor, "sync", {
       current: res.sync?.current,
       next: res.sync?.next,

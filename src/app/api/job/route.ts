@@ -1,4 +1,4 @@
-// The same run as the 15-minute GitHub job, for an outside timer (cron-job.org) to call.
+// The same run as the GitHub backup job, for an outside timer (cron-job.org) to call.
 // GitHub's schedule is unreliable (runs can be hours apart), so this keeps locks, scores
 // and emails on time. Protected by JOB_SECRET: send it as "Authorization: Bearer <secret>".
 import { NextResponse } from "next/server";

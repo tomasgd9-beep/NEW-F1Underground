@@ -1,7 +1,7 @@
 import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { getDb } from "@/db";
-import { activityLog, invites, picks, players, races, users } from "@/db/schema";
+import { activityLog, invites, picks, players, races, users, xpSnapshots } from "@/db/schema";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { CopyLink } from "@/components/copy-link";
 import { getLeague } from "@/lib/league";
@@ -73,7 +73,7 @@ export default async function Admin({
       .where(
         and(
           or(eq(activityLog.leagueId, leagueId), isNull(activityLog.leagueId)),
-          // Routine 15-minute syncs only show when they fail.
+          // Routine syncs only show when they fail.
           sql`not (${activityLog.action} = 'sync' and ${activityLog.result} = 'ok')`,
         ),
       )
@@ -118,6 +118,22 @@ export default async function Admin({
   const [priceCount] = race
     ? await db.select({ n: sql<number>`count(*)::int` }).from(assetPrices).where(eq(assetPrices.raceId, race.id))
     : [{ n: 0 }];
+  const [snap] = race
+    ? await db
+        .select({ name: xpSnapshots.name, at: xpSnapshots.capturedAt })
+        .from(xpSnapshots)
+        .where(eq(xpSnapshots.raceId, race.id))
+        .orderBy(desc(xpSnapshots.capturedAt))
+        .limit(1)
+    : [];
+  const [lockLog] = race?.lockedAt
+    ? await db
+        .select({ detail: activityLog.detail })
+        .from(activityLog)
+        .where(and(eq(activityLog.action, "teams_locked"), sql`${activityLog.detail}->>'race' = ${race.label}`))
+        .orderBy(desc(activityLog.at))
+        .limit(1)
+    : [];
   const [lastSync] = await db
     .select()
     .from(activityLog)
@@ -304,7 +320,7 @@ export default async function Admin({
           </Card>
         )}
 
-        <Card title="Race control" note="the job runs every 15 minutes">
+        <Card title="Race control" note="the job runs every 5 minutes">
           {race ? (
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
               <dt className="text-muted">Race</dt>
@@ -321,6 +337,14 @@ export default async function Admin({
               <dt className="text-muted">Prices</dt>
               <dd className={priceCount.n ? "" : "text-down"}>
                 {priceCount.n ? `${priceCount.n} assets priced` : "None yet: import them below before the deadline"}
+              </dd>
+              <dt className="text-muted">Expected points</dt>
+              <dd>
+                {race.lockedAt
+                  ? String(lockLog?.detail?.xpSource ?? "not recorded (locked before this was added)")
+                  : snap
+                    ? `${snap.name}, captured ${when(snap.at)}`
+                    : "none captured yet (f1fantasytools posts them during race week)"}
               </dd>
             </dl>
           ) : (
@@ -468,6 +492,9 @@ export default async function Admin({
                 </span>
                 <span>
                   {names.get(l.actor) ?? (l.actor === "job" ? "Job" : "Someone")} · {l.action.replaceAll("_", " ")}
+                  {l.action === "teams_locked" && typeof l.detail?.xpSource === "string" && (
+                    <span className="text-muted"> · based on {l.detail.xpSource}</span>
+                  )}
                   {l.result !== "ok" && <span className="text-down"> · {l.result}</span>}
                 </span>
               </li>

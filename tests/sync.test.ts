@@ -6,7 +6,7 @@ import brazil from "./fixtures/fft-brazil.json";
 import type { FftAsset, FftLive } from "@/lib/fft";
 import { ensureBootstrapCommissioner, getLeague, joinAsNewPlayer } from "@/lib/league";
 import { currentRace, savePicks, teamAssets } from "@/lib/team";
-import { importPrices, lockRace, priceNextRace, runJob, syncFromFft } from "@/lib/sync";
+import { importPrices, lockRace, priceNextRace, runJob, syncFromFft, type Sim } from "@/lib/sync";
 import { makeUser, testDb } from "./helpers";
 
 /** Brazil 2026 plus a few extra drivers so a full team (×2 + 4 drivers) is possible. */
@@ -222,5 +222,40 @@ describe("a full job run", () => {
     expect(res.lock?.race).toBe("R21 VEG");
     expect(asked).toBe(21);
     expect(res.prices).toBeNull();
+    expect(res.lock?.xpSource).toMatch(/season points/);
+  });
+
+  it("captures changed simulations every 30 minutes and falls back to the last one before the deadline", async () => {
+    await syncFromFft(db, fixture());
+    const vegas = (await currentRace(db))!;
+    await importPrices(db, vegas, PRICES);
+    let sim: Sim | null = { name: "Early v2", xp: { RED_VER: 30, MER: 70 } };
+    let asks = 0;
+    const getXp = async () => {
+      asks++;
+      return sim;
+    };
+    const at = (iso: string) => new Date(iso);
+    await runJob(db, fixture(), getXp, at("2026-11-20T10:00:00Z"));
+    await runJob(db, fixture(), getXp, at("2026-11-20T10:05:00Z")); // under 30 min: not asked
+    expect(asks).toBe(1);
+    await runJob(db, fixture(), getXp, at("2026-11-20T10:31:00Z")); // same simulation: not stored again
+    sim = { name: "Post-FP3", xp: { RED_VER: 25, MER: 72 } };
+    await runJob(db, fixture(), getXp, at("2026-11-21T03:10:00Z"));
+    const snaps = await db.select().from(s.xpSnapshots);
+    expect(snaps.map((x) => x.name)).toEqual(["Early v2", "Post-FP3"]);
+    // f1fantasytools down at the lock: the Post-FP3 capture is used.
+    sim = null;
+    const res = await runJob(db, fixture(), getXp, at("2026-11-21T04:05:00Z"));
+    expect(res.lock?.xpSource).toMatch(/Post-FP3 \(captured/);
+    expect(snaps.length).toBe(2);
+  });
+
+  it("reads f1fantasytools at the lock when it can", async () => {
+    await syncFromFft(db, fixture());
+    const vegas = (await currentRace(db))!;
+    await importPrices(db, vegas, PRICES);
+    const res = await runJob(db, fixture(), async () => ({ name: "Post-FP3", xp: { RED_VER: 30 } }), new Date("2026-11-21T04:05:00Z"));
+    expect(res.lock?.xpSource).toBe("f1fantasytools Post-FP3 (read at the lock)");
   });
 });

@@ -210,16 +210,16 @@ export async function lockNow(): Promise<ActionResult> {
   return attempt(async () => {
     const v = await commissionerOrError();
     const { currentRace } = await import("@/lib/team");
-    const { lockRace } = await import("@/lib/sync");
+    const { lockRace, xpForLock } = await import("@/lib/sync");
     const { fetchExpectedPoints } = await import("@/lib/fft");
     const db = getDb();
     const race = await currentRace(db);
     if (!race) throw new league.LeagueError("No race is open.");
     if (race.lockedAt) throw new league.LeagueError(`${race.label} is already locked.`);
-    const xp = (await fetchExpectedPoints(race.round))?.xp ?? null;
+    const { xp, source } = await xpForLock(db, race, (round) => fetchExpectedPoints(round));
     let res;
     try {
-      res = await lockRace(db, race, xp, { force: true, actor: v.userId });
+      res = await lockRace(db, race, xp, { force: true, actor: v.userId, xpSource: source });
     } catch (e) {
       throw new league.LeagueError(e instanceof Error ? e.message : String(e));
     }

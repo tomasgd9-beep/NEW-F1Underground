@@ -12,8 +12,10 @@ import {
   players,
   pricePeers,
   races,
+  jobState,
   seasons,
   stints,
+  xpSnapshots,
 } from "@/db/schema";
 import {
   CONSTRUCTOR_NAMES,
@@ -223,7 +225,12 @@ export async function syncFromFft(db: Db, live: FftLive): Promise<SyncSummary> {
 
 /* ───────────────────────────── Lock ───────────────────────────── */
 
-export type LockSummary = { race: string; leagues: { name: string; kept: number; autoFilled: number; random: number }[] };
+export type LockSummary = {
+  race: string;
+  /** What the auto-filled and random teams were based on. */
+  xpSource?: string;
+  leagues: { name: string; kept: number; autoFilled: number; random: number }[];
+};
 
 /**
  * At the deadline: fill partial teams, give empty ones a random top team,
@@ -234,7 +241,7 @@ export async function lockRace(
   db: Db,
   race: Race,
   xpByFft: Record<string, number> | null,
-  opts: { now?: Date; force?: boolean; rng?: () => number; actor?: string } = {},
+  opts: { now?: Date; force?: boolean; rng?: () => number; actor?: string; xpSource?: string } = {},
 ): Promise<LockSummary | null> {
   const now = opts.now ?? new Date();
   if (race.lockedAt) return null;
@@ -266,7 +273,7 @@ async function fillAndFreeze(
   assets: Awaited<ReturnType<typeof teamAssets>>,
   xpByFft: Record<string, number> | null,
   now: Date,
-  opts: { rng?: () => number; actor?: string },
+  opts: { rng?: () => number; actor?: string; xpSource?: string },
 ): Promise<LockSummary> {
   const [season] = await db.select().from(seasons).where(eq(seasons.id, race.seasonId));
   const budget = num(season.budget);
@@ -291,7 +298,8 @@ async function fillAndFreeze(
   const C = assets.filter((a) => a.kind === "constructor").map((a) => a.id);
   const valid = new Set(assets.map((a) => a.id));
 
-  const summary: LockSummary = { race: race.label, leagues: [] };
+  const xpSource = xpByFft ? (opts.xpSource ?? "f1fantasytools expected points") : "season points (no expected points)";
+  const summary: LockSummary = { race: race.label, xpSource, leagues: [] };
   for (const lg of await db.select().from(leagues)) {
     const members = await db
       .select({ id: players.id, joinedAt: players.joinedAtRaceId })
@@ -371,7 +379,7 @@ async function fillAndFreeze(
     }
     const s = { name: lg.name, kept, autoFilled, random: randoms.length };
     summary.leagues.push(s);
-    await logActivity(db, opts.actor ?? "job", "teams_locked", { race: race.label, ...s }, { leagueId: lg.id });
+    await logActivity(db, opts.actor ?? "job", "teams_locked", { race: race.label, ...s, xpSource }, { leagueId: lg.id });
   }
 
   await db.update(assetPrices).set({ frozenAt: now }).where(and(eq(assetPrices.raceId, race.id), isNull(assetPrices.frozenAt)));
@@ -586,14 +594,95 @@ export async function priceSeasonOpener(db: Db, seasonId: number): Promise<{ rac
 
 export type RunResult = { sync?: SyncSummary; lock?: LockSummary | null; prices?: { race: string; priced: number } | null };
 
+export type Sim = { name: string; xp: Record<string, number> };
+
+const SNAPSHOT_EVERY = 30 * 60_000;
+
+function simHash(xp: Record<string, number>) {
+  return JSON.stringify(Object.keys(xp).sort().map((k) => [k, xp[k]]));
+}
+
 /**
- * Everything the 15-minute job does, in order. `getXp` fetches expected
- * points only when a lock actually happens.
+ * Every 30 minutes before the deadline, keep f1fantasytools' expected points for the open race
+ * if the analyst simulation changed since the last capture. Never throws.
+ */
+export async function captureXp(db: Db, race: Race, getXp: (round: number) => Promise<Sim | null>, now = new Date()) {
+  if (race.lockedAt || !race.deadline || race.deadline <= now) return null;
+  const key = `xp:${race.id}`;
+  const [st] = await db.select().from(jobState).where(eq(jobState.key, key));
+  if (st && now.getTime() - st.updatedAt.getTime() < SNAPSHOT_EVERY) return null;
+  await db
+    .insert(jobState)
+    .values({ key, updatedAt: now })
+    .onConflictDoUpdate({ target: jobState.key, set: { updatedAt: now } });
+  let sim: Sim | null = null;
+  try {
+    sim = await getXp(race.round);
+  } catch {
+    return null;
+  }
+  if (!sim) return null;
+  const hash = simHash(sim.xp);
+  const [last] = await db
+    .select({ hash: xpSnapshots.hash })
+    .from(xpSnapshots)
+    .where(eq(xpSnapshots.raceId, race.id))
+    .orderBy(desc(xpSnapshots.capturedAt))
+    .limit(1);
+  if (last?.hash === hash) return null;
+  const [row] = await db
+    .insert(xpSnapshots)
+    .values({ raceId: race.id, name: sim.name, xp: sim.xp, hash, capturedAt: now })
+    .returning();
+  return row;
+}
+
+/** The latest expected points captured before the race's deadline. */
+export async function latestSnapshot(db: Db, race: Race) {
+  const [row] = await db
+    .select()
+    .from(xpSnapshots)
+    .where(
+      and(eq(xpSnapshots.raceId, race.id), race.deadline ? lt(xpSnapshots.capturedAt, race.deadline) : sql`true`),
+    )
+    .orderBy(desc(xpSnapshots.capturedAt))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Expected points for locking a race: f1fantasytools right now; if that fails, the last
+ * capture before the deadline; if there is none, season points (the lock's own fallback).
+ */
+export async function xpForLock(db: Db, race: Race, getXp: (round: number) => Promise<Sim | null>) {
+  let live: Sim | null = null;
+  try {
+    live = await getXp(race.round);
+  } catch {
+    live = null;
+  }
+  if (live) return { xp: live.xp, source: `f1fantasytools ${live.name} (read at the lock)` };
+  const snap = await latestSnapshot(db, race);
+  if (snap) {
+    const at = snap.capturedAt.toLocaleString("en-CA", {
+      timeZone: "America/Toronto",
+      weekday: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    return { xp: snap.xp, source: `f1fantasytools ${snap.name} (captured ${at} ET)` };
+  }
+  return { xp: null, source: undefined };
+}
+
+/**
+ * Everything the 5-minute job does, in order. `getXp` fetches f1fantasytools' analyst
+ * simulation for a round (null when there is none or it can't be read).
  */
 export async function runJob(
   db: Db,
   live: FftLive,
-  getXp: (round: number) => Promise<Record<string, number> | null>,
+  getXp: (round: number) => Promise<Sim | null>,
   now = new Date(),
 ): Promise<RunResult> {
   const out: RunResult = {};
@@ -601,7 +690,10 @@ export async function runJob(
 
   const cur = await currentRace(db);
   if (cur && !cur.lockedAt && cur.deadline && cur.deadline <= now) {
-    out.lock = await lockRace(db, cur, await getXp(cur.round), { now });
+    const { xp, source } = await xpForLock(db, cur, getXp);
+    out.lock = await lockRace(db, cur, xp, { now, xpSource: source });
+  } else if (cur) {
+    await captureXp(db, cur, getXp, now);
   }
 
   const [finished] = await db.select().from(races).where(eq(races.fftId, live.race.id)).limit(1);
