@@ -48,6 +48,9 @@ export function utcToTorontoInput(d: Date): string {
 async function raceById(db: Db, raceId: number): Promise<Race> {
   const [r] = await db.select().from(races).where(eq(races.id, raceId));
   if (!r) throw new LeagueError("Race not found.");
+  // Finished seasons (imported from the old spreadsheets) are view-only.
+  const [s] = await db.select({ status: seasons.status }).from(seasons).where(eq(seasons.id, r.seasonId));
+  if (s?.status === "finished") throw new LeagueError("That season is finished and can't be changed.");
   return r;
 }
 

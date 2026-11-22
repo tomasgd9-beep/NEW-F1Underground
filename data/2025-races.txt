@@ -1,0 +1,25 @@
+# round|label|name|country|city|sprint|start_times (approximate: noon UTC)
+1|R1 AUS|Australian Grand Prix|AUS|Melbourne|0|{"qualifying":"2025-03-15T12:00:00.000Z","race":"2025-03-16T12:00:00.000Z"}
+2|R2 CHN|Chinese Grand Prix|CHN|Shanghai|1|{"qualifying":"2025-03-22T12:00:00.000Z","race":"2025-03-23T12:00:00.000Z","sprint":"2025-03-21T12:00:00.000Z"}
+3|R3 JPN|Japanese Grand Prix|JPN|Suzuka|0|{"qualifying":"2025-04-05T12:00:00.000Z","race":"2025-04-06T12:00:00.000Z"}
+4|R4 BHR|Bahrain Grand Prix|BHR|Sakhir|0|{"qualifying":"2025-04-12T12:00:00.000Z","race":"2025-04-13T12:00:00.000Z"}
+5|R5 SAU|Saudi Arabian Grand Prix|SAU|Jeddah|0|{"qualifying":"2025-04-19T12:00:00.000Z","race":"2025-04-20T12:00:00.000Z"}
+6|R6 MIA|Miami Grand Prix|USA|Miami|1|{"qualifying":"2025-05-03T12:00:00.000Z","race":"2025-05-04T12:00:00.000Z","sprint":"2025-05-02T12:00:00.000Z"}
+7|R7 EMI|Emilia Romagna Grand Prix|ITA|Imola|0|{"qualifying":"2025-05-17T12:00:00.000Z","race":"2025-05-18T12:00:00.000Z"}
+8|R8 MON|Monaco Grand Prix|MCO|Monte Carlo|0|{"qualifying":"2025-05-24T12:00:00.000Z","race":"2025-05-25T12:00:00.000Z"}
+9|R9 ESP|Spanish Grand Prix|ESP|Barcelona|0|{"qualifying":"2025-05-31T12:00:00.000Z","race":"2025-06-01T12:00:00.000Z"}
+10|R10 CAN|Canadian Grand Prix|CAN|Montreal|0|{"qualifying":"2025-06-14T12:00:00.000Z","race":"2025-06-15T12:00:00.000Z"}
+11|R11 AUT|Austrian Grand Prix|AUT|Spielberg|0|{"qualifying":"2025-06-28T12:00:00.000Z","race":"2025-06-29T12:00:00.000Z"}
+12|R12 GBR|British Grand Prix|GBR|Silverstone|0|{"qualifying":"2025-07-05T12:00:00.000Z","race":"2025-07-06T12:00:00.000Z"}
+13|R13 BEL|Belgian Grand Prix|BEL|Spa-Francorchamps|1|{"qualifying":"2025-07-26T12:00:00.000Z","race":"2025-07-27T12:00:00.000Z","sprint":"2025-07-25T12:00:00.000Z"}
+14|R14 HUN|Hungarian Grand Prix|HUN|Budapest|0|{"qualifying":"2025-08-02T12:00:00.000Z","race":"2025-08-03T12:00:00.000Z"}
+15|R15 NED|Dutch Grand Prix|NLD|Zandvoort|0|{"qualifying":"2025-08-30T12:00:00.000Z","race":"2025-08-31T12:00:00.000Z"}
+16|R16 ITA|Italian Grand Prix|ITA|Monza|0|{"qualifying":"2025-09-06T12:00:00.000Z","race":"2025-09-07T12:00:00.000Z"}
+17|R17 AZE|Azerbaijan Grand Prix|AZE|Baku|0|{"qualifying":"2025-09-20T12:00:00.000Z","race":"2025-09-21T12:00:00.000Z"}
+18|R18 SIN|Singapore Grand Prix|SGP|Singapore|0|{"qualifying":"2025-10-04T12:00:00.000Z","race":"2025-10-05T12:00:00.000Z"}
+19|R19 USA|United States Grand Prix|USA|Austin|1|{"qualifying":"2025-10-18T12:00:00.000Z","race":"2025-10-19T12:00:00.000Z","sprint":"2025-10-17T12:00:00.000Z"}
+20|R20 MEX|Mexico City Grand Prix|MEX|Mexico City|0|{"qualifying":"2025-10-25T12:00:00.000Z","race":"2025-10-26T12:00:00.000Z"}
+21|R21 BRA|São Paulo Grand Prix|BRA|São Paulo|1|{"qualifying":"2025-11-08T12:00:00.000Z","race":"2025-11-09T12:00:00.000Z","sprint":"2025-11-07T12:00:00.000Z"}
+22|R22 VEG|Las Vegas Grand Prix|USA|Las Vegas|0|{"qualifying":"2025-11-21T12:00:00.000Z","race":"2025-11-22T12:00:00.000Z"}
+23|R23 QAT|Qatar Grand Prix|QAT|Lusail|1|{"qualifying":"2025-11-29T12:00:00.000Z","race":"2025-11-30T12:00:00.000Z","sprint":"2025-11-28T12:00:00.000Z"}
+24|R24 ABU|Abu Dhabi Grand Prix|ARE|Abu Dhabi|0|{"qualifying":"2025-12-06T12:00:00.000Z","race":"2025-12-07T12:00:00.000Z"}

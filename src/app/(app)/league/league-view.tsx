@@ -270,6 +270,9 @@ function RaceView({
                 </span>
                 <div className="col-span-3 flex items-center gap-1 md:col-span-1">
                   <div className="grid flex-1 grid-cols-6 gap-1 md:max-w-[34rem]">
+                    {chips.length === 0 && (
+                      <span className="col-span-6 text-xs text-muted">Picks not recorded in the old spreadsheet</span>
+                    )}
                     {chips.map((c) => {
                       const on = lit === c.assetId;
                       const colour = c.a?.colour ?? "#888888";

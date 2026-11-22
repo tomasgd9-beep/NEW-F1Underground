@@ -1,4 +1,5 @@
-// One-off import of the 2026 season as played on the spreadsheet (R1 AUS → R22 BRA).
+// One-off imports of seasons played on the spreadsheets: 2026 (R1 AUS → R22 BRA, then the
+// site took over), and the finished 2025 and 2024 seasons, which are view-only.
 // The sheet is the source of truth: driver/constructor points come from its Points
 // tab, teams from its Scoring archive, and every player's race score is pinned to
 // the sheet's season table (picks.scoreAdjust absorbs any difference).
@@ -29,7 +30,17 @@ export type HistoryFiles = { races: string; points: string; teams: string };
 type RaceRow = { round: number; label: string; name: string; country: string; sprint: boolean; times: Record<string, string> };
 type AssetRow = { key: string; ticker: string; team: string; kind: "D" | "I" | "C"; lsp: number | null };
 type PointRow = { round: number; key: string; parts: Breakdown; total: number };
-type TeamRow = { round: number; player: string; x2: string; x1: string[]; c: string; penalty: number; sheet: number | null };
+type TeamRow = {
+  round: number;
+  player: string;
+  x2: string;
+  x1: string[];
+  c: string;
+  penalty: number;
+  sheet: number | null;
+  /** The team price the sheet recorded, when it did. */
+  price: number | null;
+};
 
 const lines = (s: string) =>
   s
@@ -67,6 +78,7 @@ export function parseHistory(f: HistoryFiles) {
         c: p[5],
         penalty: Number(p[6]),
         sheet: /^-?\d+$/.test(p[7]) ? Number(p[7]) : null,
+        price: p[8] && !Number.isNaN(Number(p[8])) && Number(p[8]) > 0 ? Number(p[8]) : null,
       });
   }
 
@@ -101,12 +113,29 @@ const fold = (s: string) =>
 export type BackfillResult = { skipped: boolean; races: number; points: number; teams: number; created: string[]; mismatches: string[] };
 
 export async function backfill2026(db: Db, files: HistoryFiles, opts: { force?: boolean } = {}): Promise<BackfillResult> {
+  return backfillSeason(db, 2026, files, { ...opts, prices: true, past: false });
+}
+
+/**
+ * Import one season from its spreadsheet export.
+ * `prices`: work out each race's driver and team prices with the league formula (2024's
+ * prices weren't kept race by race, so it shows the sheet's team prices only).
+ * `past`: a finished season. Its players, drivers and teams that aren't in the current season
+ * are added as inactive, so nothing from it shows up in the current team builder.
+ */
+export async function backfillSeason(
+  db: Db,
+  year: number,
+  files: HistoryFiles,
+  opts: { force?: boolean; prices: boolean; past: boolean },
+): Promise<BackfillResult> {
+  const action = `backfill_${year}`;
   const hash = createHash("sha256").update(files.races + files.points + files.teams).digest("hex").slice(0, 16);
   if (!opts.force) {
     const done = await db
       .select({ id: activityLog.id })
       .from(activityLog)
-      .where(and(eq(activityLog.action, "backfill_2026"), sql`${activityLog.detail}->>'hash' = ${hash}`))
+      .where(and(eq(activityLog.action, action), sql`${activityLog.detail}->>'hash' = ${hash}`))
       .limit(1);
     if (done.length) return { skipped: true, races: 0, points: 0, teams: 0, created: [], mismatches: [] };
   }
@@ -116,8 +145,8 @@ export async function backfill2026(db: Db, files: HistoryFiles, opts: { force?: 
   if (!league) throw new Error("No league yet");
 
   // Season
-  let [s] = await db.select().from(seasons).where(eq(seasons.year, 2026));
-  if (!s) [s] = await db.insert(seasons).values({ year: 2026, status: "active" }).returning();
+  let [s] = await db.select().from(seasons).where(eq(seasons.year, year));
+  if (!s) [s] = await db.insert(seasons).values({ year, status: opts.past ? "finished" : "active" }).returning();
 
   // Races
   const raceId = new Map<number, number>();
@@ -133,7 +162,7 @@ export async function backfill2026(db: Db, files: HistoryFiles, opts: { force?: 
       status: "completed" as const,
       results: "final" as const,
     };
-    const fftId = `2026_${r.round}`;
+    const fftId = `${year}_${r.round}`;
     const [existing] = await db.select().from(races).where(eq(races.fftId, fftId)).limit(1);
     if (existing) {
       await db
@@ -155,7 +184,8 @@ export async function backfill2026(db: Db, files: HistoryFiles, opts: { force?: 
   for (const t of new Set(assets.map((a) => a.team))) {
     const [c] = await db
       .insert(constructors)
-      .values({ ticker: t, name: CONSTRUCTOR_NAMES[t] ?? t })
+      // A team that only existed in a past season (Kick Sauber) is added as inactive.
+      .values({ ticker: t, name: CONSTRUCTOR_NAMES[t] ?? t, ...(opts.past ? { active: false } : {}) })
       .onConflictDoUpdate({ target: constructors.ticker, set: { ticker: t } })
       .returning({ id: constructors.id });
     consId.set(t, c.id);
@@ -186,7 +216,8 @@ export async function backfill2026(db: Db, files: HistoryFiles, opts: { force?: 
     const [first, last] = firstLast(a.key);
     if (existing) {
       stintId.set(a.key, existing.id);
-      if (!existing.firstRaceId || existing.firstRaceId !== raceId.get(first)) {
+      // A past season never changes a stint the current season uses.
+      if (!opts.past && (!existing.firstRaceId || existing.firstRaceId !== raceId.get(first))) {
         await db.update(stints).set({ firstRaceId: raceId.get(first) }).where(eq(stints.id, existing.id));
       }
     } else {
@@ -197,14 +228,15 @@ export async function backfill2026(db: Db, files: HistoryFiles, opts: { force?: 
           constructorId: cid,
           fftId,
           firstRaceId: raceId.get(first),
-          lastRaceId: a.kind === "I" ? raceId.get(last) : null,
-          active: a.kind !== "I",
+          lastRaceId: a.kind === "I" || opts.past ? raceId.get(last) : null,
+          active: a.kind !== "I" && !opts.past,
         })
         .returning({ id: stints.id });
       stintId.set(a.key, c.id);
     }
   }
   const assetId = (key: string) => {
+    if (!key) return { stintId: null, constructorId: null, id: "" };
     const a = assets.find((x) => x.key === key);
     if (!a) throw new Error(`Unknown asset ${key}`);
     return a.kind === "C" ? { constructorId: consId.get(a.team)!, id: `c${consId.get(a.team)}` } : { stintId: stintId.get(key)!, id: `s${stintId.get(key)}` };
@@ -260,7 +292,7 @@ export async function backfill2026(db: Db, files: HistoryFiles, opts: { force?: 
     const floored = applyFloor(rows.map((r) => r.formula)).map(round2);
     rows.forEach((r, j) => priceOf.set(`${round}|${r.u.unit}`, floored[j]));
     const rid = raceId.get(round)!;
-    if (pricedIds.has(rid)) continue;
+    if (pricedIds.has(rid) || !opts.prices) continue;
     await db.insert(assetPrices).values(
       rows.map((r, j) => ({
         raceId: rid,
@@ -286,7 +318,11 @@ export async function backfill2026(db: Db, files: HistoryFiles, opts: { force?: 
       playerId.set(name, hits[0].id);
       continue;
     }
-    const [p] = await db.insert(players).values({ leagueId: league.id, displayName: name }).returning({ id: players.id });
+    // Someone who only played a past season gets an inactive profile: no teams, no emails.
+    const [p] = await db
+      .insert(players)
+      .values({ leagueId: league.id, displayName: name, ...(opts.past ? { active: false } : {}) })
+      .returning({ id: players.id });
     playerId.set(name, p.id);
     created.push(name);
   }
@@ -297,11 +333,12 @@ export async function backfill2026(db: Db, files: HistoryFiles, opts: { force?: 
   const mismatches: string[] = [];
   const pickRows = teams.map((t) => {
     const unit = (key: string) => {
+      if (!key) return "";
       const a = assets.find((x) => x.key === key)!;
       return a.kind === "C" ? `c${consId.get(a.team)}` : `p${personOf.get(key)}`;
     };
     const keys = [t.x2, ...t.x1, t.c].filter(Boolean);
-    const price = keys.reduce((sum, k) => sum + (priceOf.get(`${t.round}|${unit(k)}`) ?? 0), 0);
+    const price = t.price ?? keys.reduce((sum, k) => sum + (priceOf.get(`${t.round}|${unit(k)}`) ?? 0), 0);
     const raw = 2 * (pointOf.get(`${t.round}|${t.x2}`) ?? 0) + t.x1.reduce((sum, k) => sum + (pointOf.get(`${t.round}|${k}`) ?? 0), 0) + (pointOf.get(`${t.round}|${t.c}`) ?? 0);
     const roundIdx = raceRows.findIndex((r) => r.round === t.round);
     const target = season.get(t.player)?.[roundIdx] ?? t.sheet ?? raw + t.penalty;
@@ -317,7 +354,7 @@ export async function backfill2026(db: Db, files: HistoryFiles, opts: { force?: 
       driver3StintId: d[2] ?? null,
       driver4StintId: d[3] ?? null,
       constructorId: assetId(t.c).constructorId ?? null,
-      frozenTeamPrice: String(round2(price)),
+      frozenTeamPrice: price ? String(round2(price)) : null,
       penalty: t.penalty,
       scoreAdjust: adjust,
       origin: "manual" as const,
@@ -327,12 +364,12 @@ export async function backfill2026(db: Db, files: HistoryFiles, opts: { force?: 
   for (let i = 0; i < pickRows.length; i += 100) await db.insert(picks).values(pickRows.slice(i, i + 100));
 
   // Everyone in the sheet played from R1, so none of them "joined" mid-season.
-  await db.update(players).set({ joinedAtRaceId: null }).where(inArray(players.id, pids));
+  if (!opts.past) await db.update(players).set({ joinedAtRaceId: null }).where(inArray(players.id, pids));
 
   await logActivity(
     db,
     "job",
-    "backfill_2026",
+    action,
     { hash, races: raceRows.length, points: ptRows.length, teams: pickRows.length, created, mismatches },
     { leagueId: league.id },
   );

@@ -42,7 +42,12 @@ export type LeagueData = {
 
 const n = (v: string | null | undefined) => (v == null ? null : Number(v));
 
-export async function loadLeague(db: Db, leagueId: number, meId: number, seasonId?: number): Promise<LeagueData | null> {
+export async function loadLeague(
+  db: Db,
+  leagueId: number,
+  meId: number,
+  seasonId?: number,
+): Promise<LeagueData | null> {
   // Only seasons that have races on the site (earlier years lived in other spreadsheets).
   const allSeasons = await db
     .selectDistinct({ id: seasons.id, year: seasons.year })
@@ -63,7 +68,11 @@ export async function loadLeague(db: Db, leagueId: number, meId: number, seasonI
   if (open && !shown.includes(open)) shown.push(open);
   const raceIds = shown.map((r) => r.id);
 
-  const playerRows = await db.select().from(players).where(eq(players.leagueId, leagueId)).orderBy(asc(players.displayName));
+  const playerRows = await db
+    .select()
+    .from(players)
+    .where(eq(players.leagueId, leagueId))
+    .orderBy(asc(players.displayName));
   const playerIds = playerRows.map((p) => p.id);
 
   const lockedIds = shown.filter((r) => r.lockedAt).map((r) => r.id);
@@ -92,9 +101,7 @@ export async function loadLeague(db: Db, leagueId: number, meId: number, seasonI
     (teams[p.raceId] ??= {})[p.playerId] = team;
   }
 
-  const ptRows = raceIds.length
-    ? await db.select().from(assetPoints).where(inArray(assetPoints.raceId, raceIds))
-    : [];
+  const ptRows = raceIds.length ? await db.select().from(assetPoints).where(inArray(assetPoints.raceId, raceIds)) : [];
   const points: LeagueData["points"] = {};
   const parts: LeagueData["parts"] = {};
   for (const p of ptRows) {
@@ -128,7 +135,15 @@ export async function loadLeague(db: Db, leagueId: number, meId: number, seasonI
     };
   }
   for (const c of await db.select().from(constructors)) {
-    assets[`c${c.id}`] = { id: `c${c.id}`, kind: "constructor", ticker: c.ticker, name: c.name, team: c.name, colour: c.colour, statKey: `c${c.id}` };
+    assets[`c${c.id}`] = {
+      id: `c${c.id}`,
+      kind: "constructor",
+      ticker: c.ticker,
+      name: c.name,
+      team: c.name,
+      colour: c.colour,
+      statKey: `c${c.id}`,
+    };
   }
 
   // Season and Last 3 as they stand now (person-level for drivers).
@@ -155,11 +170,14 @@ export async function loadLeague(db: Db, leagueId: number, meId: number, seasonI
       locked: !!r.lockedAt,
       deadline: r.deadline?.toISOString() ?? null,
     })),
-    players: playerRows.filter((p) => p.active || pickRows.some((x) => x.playerId === p.id)).map((p) => ({
-      id: p.id,
-      name: p.displayName,
-      joinedRaceId: p.joinedAtRaceId,
-    })),
+    // A finished season shows only the people who played it.
+    players: playerRows
+      .filter((p) => (p.active && season.id === allSeasons.at(-1)!.id) || pickRows.some((x) => x.playerId === p.id))
+      .map((p) => ({
+        id: p.id,
+        name: p.displayName,
+        joinedRaceId: p.joinedAtRaceId,
+      })),
     meId,
     teams,
     submitted,
