@@ -50,6 +50,13 @@
       "when": 1795449472658,
       "tag": "0006_email_prefs_recaps",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795450741535,
+      "tag": "0007_recap_auto",
+      "breakpoints": true
     }
   ]
 }

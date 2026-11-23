@@ -1,14 +1,15 @@
-// The weekend recap email. A commissioner writes a few lines on Admin and sends it;
-// everything else (podium, highlights, race and season tables, graph, next race)
+// The weekend recap email. The scheduled job sends it by itself once a race's results
+// are final (a commissioner can preview it, send a test, or resend from Admin).
+// Everything (podium, highlights, race and season tables, graph, next race)
 // comes from the League data. Tables are real HTML so they stay sharp and readable
 // with images blocked; only the graph is an image (attached inline).
-import { and, desc, eq, gte, isNotNull } from "drizzle-orm";
+import { and, desc, eq, gt, gte, isNotNull } from "drizzle-orm";
 import type { Db } from "@/db";
 import { assetPrices, leagues, people, players, races, recaps, seasons } from "@/db/schema";
 import { logActivity } from "@/lib/league";
 import { loadLeague } from "@/lib/league-data";
 import { appUrl, escapeHtml, sendMail } from "@/lib/mail";
-import { claim, deliver, ordinal, recipients, type Recipient } from "@/lib/notify";
+import { alreadySent, claim, deliver, ordinal, recipients, type Recipient } from "@/lib/notify";
 import { buildRecap, lockTime, type Recap } from "@/lib/recap";
 import { shareImage } from "@/lib/share-images";
 import { unsubscribeParts } from "@/lib/email-prefs";
@@ -237,11 +238,16 @@ export async function saveRecapNote(db: Db, leagueId: number, raceId: number, no
 }
 
 /** A test copy to one address (nothing recorded, settings ignored). */
-export async function sendRecapTest(db: Db, leagueId: number, raceId: number, note: string, author: string, to: { email: string; name: string; playerId: number }) {
+export async function sendRecapTest(db: Db, leagueId: number, raceId: number, note: string, author: string, to: { email: string; name: string; playerId: number; userId?: string }) {
   const loaded = await loadRecap(db, leagueId, raceId);
   if (!loaded) throw new Error("No recap for that race yet: teams have to be locked and scored.");
   const mail = recapEmail(loaded.recap, { ...loaded, note, author }, to);
-  await sendMail(to.email, `[Test] ${mail.subject}`, mail.text, mail.html, { attachments: graphAttachment(await recapGraph(loaded.recap)) });
+  // The real footer (your own links), so the test shows exactly what players get.
+  const foot = to.userId ? await unsubscribeParts(db, to.userId, "recaps") : { text: "", html: "", extras: {} };
+  await sendMail(to.email, `[Test] ${mail.subject}`, mail.text + foot.text, mail.html + foot.html, {
+    ...foot.extras,
+    attachments: graphAttachment(await recapGraph(loaded.recap)),
+  });
 }
 
 /**
@@ -249,14 +255,18 @@ export async function sendRecapTest(db: Db, leagueId: number, raceId: number, no
  * again only reaches people who didn't get it yet). Returns how many were sent.
  */
 export async function sendRecapToAll(db: Db, leagueId: number, raceId: number, note: string, author: string, actorUserId: string) {
+  const people = (await recipients(db, "recaps")).filter((r: Recipient) => r.leagueId === leagueId);
+  // Nobody left to send to: stop before the (slow) data load and graph.
+  const todo = [];
+  for (const r of people) if (!(await alreadySent(db, r.playerId, raceId, "recap"))) todo.push(r);
+  if (!todo.length) return { sent: 0, failed: [] as string[], skipped: people.length };
   const loaded = await loadRecap(db, leagueId, raceId);
   if (!loaded) throw new Error("No recap for that race yet: teams have to be locked and scored.");
   await saveRecapNote(db, leagueId, raceId, note);
   const png = await recapGraph(loaded.recap);
-  const people = (await recipients(db, "recaps")).filter((r: Recipient) => r.leagueId === leagueId);
   let sent = 0;
   const failed: string[] = [];
-  for (const r of people) {
+  for (const r of todo) {
     if (!(await claim(db, r.playerId, raceId, "recap"))) continue;
     const mail = recapEmail(loaded.recap, { ...loaded, note, author }, { name: r.name, playerId: r.playerId });
     const foot = await unsubscribeParts(db, r.userId, "recaps");
@@ -272,6 +282,7 @@ export async function sendRecapToAll(db: Db, leagueId: number, raceId: number, n
       failed.push(r.name);
     }
   }
+  if (!sent && !failed.length) return { sent, failed, skipped: people.length };
   const row = await getRecapRow(db, leagueId, raceId);
   await db
     .update(recaps)
@@ -298,4 +309,30 @@ export async function sendAnnouncement(db: Db, leagueId: number, subject: string
   }
   await logActivity(db, actorUserId, "announcement_sent", { subject, sent }, { leagueId });
   return sent;
+}
+
+/**
+ * The job's part: once a race's results are final, everyone gets the recap. Only races
+ * from the last 4 days (imported history never triggers it), and not races marked skipAuto.
+ */
+export async function sendAutoRecaps(db: Db, now = new Date()) {
+  const finals = await db
+    .select({ id: races.id, label: races.label })
+    .from(races)
+    .where(
+      and(eq(races.results, "final"), isNotNull(races.lockedAt), gt(races.deadline, new Date(now.getTime() - 4 * 24 * 3600_000))),
+    );
+  let total = 0;
+  for (const race of finals) {
+    for (const l of await db.select({ id: leagues.id }).from(leagues)) {
+      if ((await getRecapRow(db, l.id, race.id))?.skipAuto) continue;
+      const res = await sendRecapToAll(db, l.id, race.id, "", "F1 Underground", "job").catch((e) => {
+        // No teams scored yet (e.g. a league with no players): nothing to send.
+        if (String(e).includes("No recap")) return { sent: 0 };
+        throw e;
+      });
+      total += res.sent;
+    }
+  }
+  return total;
 }

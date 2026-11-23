@@ -5,6 +5,7 @@ import { fetchExpectedPoints, fetchLive } from "@/lib/fft";
 import { logActivity } from "@/lib/league";
 import { alertCommissioners, sendDeadlineReminders, sendLockNotices } from "@/lib/notify";
 import { runJob, type RunResult } from "@/lib/sync";
+import { sendAutoRecaps } from "@/lib/recap-email";
 
 export async function runScheduledJob(db: Db, actor = "job"): Promise<RunResult> {
   try {
@@ -22,6 +23,7 @@ export async function runScheduledJob(db: Db, actor = "job"): Promise<RunResult>
     for (const [what, send] of [
       ["reminders", sendDeadlineReminders],
       ["lock notices", sendLockNotices],
+      ["recaps", sendAutoRecaps],
     ] as const) {
       try {
         await send(db);

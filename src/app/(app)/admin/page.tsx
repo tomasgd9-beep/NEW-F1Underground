@@ -341,7 +341,7 @@ export default async function Admin({
         </Card>
 
         {boss && (
-          <Card title="Weekend recap" note="the email to everyone after a race">
+          <Card title="Weekend recap" note="emailed to everyone automatically when a race's results turn final">
             {recapRace ? (
               <div className="grid gap-2 text-sm">
                 <form method="get" className="flex flex-wrap items-center gap-2">
@@ -354,34 +354,19 @@ export default async function Admin({
                   </select>
                   <button className="rounded border border-line px-2 py-0.5 text-sm">Open</button>
                   <span className={recapRow?.sentAt ? "text-up font-semibold" : "text-muted"}>
-                    {recapRow?.sentAt ? `Sent to ${recapRow.sentCount} on ${when(recapRow.sentAt)}` : "Not sent yet"}
+                    {recapRow?.sentAt
+                      ? `Sent to ${recapRow.sentCount} on ${when(recapRow.sentAt)}`
+                      : recapRow?.skipAuto
+                        ? "Not sent (final before automatic recaps started)"
+                        : recapRace.results === "final"
+                          ? "Sending within 5 minutes"
+                          : "Sends when results are final"}
                   </span>
                 </form>
-                {recapRace.results !== "final" && (
-                  <p className="text-xs text-down">Results are still {recapRace.results}: points may change before they&apos;re final.</p>
-                )}
-                <ActionForm
-                  action={act.recapAction}
-                  className="grid gap-2"
-                >
+                <ActionForm action={act.recapAction} className="grid gap-2">
                   <input type="hidden" name="raceId" value={recapRace.id} />
-                  <label className="grid gap-1">
-                    <span className="text-xs text-muted">
-                      Your lines at the top (banter, corrections, penalties). The podium, highlights, tables, graph and next
-                      race are added for you.
-                    </span>
-                    <textarea
-                      name="note"
-                      rows={4}
-                      defaultValue={recapRow?.note ?? ""}
-                      className="w-full rounded border border-line bg-transparent p-2"
-                      placeholder="Sacadón de Ana con McLaren…"
-                    />
-                  </label>
+                  <input type="hidden" name="note" value={recapRow?.note ?? ""} />
                   <div className="flex flex-wrap items-center gap-1">
-                    <SubmitButton name="intent" value="save" variant="quiet">
-                      Save draft
-                    </SubmitButton>
                     <a
                       href={`/api/recap-preview/${recapRace.id}`}
                       target="_blank"
@@ -396,14 +381,12 @@ export default async function Admin({
                     <SubmitButton
                       name="intent"
                       value="send"
-                      confirm={`Email the ${recapRace.label} recap to everyone in the league now?`}
+                      variant="quiet"
+                      confirm={`Email the ${recapRace.label} recap to everyone who hasn't had it yet?`}
                     >
-                      {recapRow?.sentAt ? "Send to anyone who missed it" : "Send to everyone"}
+                      Send to anyone who hasn&apos;t had it
                     </SubmitButton>
                   </div>
-                  <p className="text-xs text-muted">
-                    Preview shows the last saved draft. Each player gets it once; people who turned recaps off are skipped.
-                  </p>
                 </ActionForm>
               </div>
             ) : (

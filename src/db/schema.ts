@@ -400,6 +400,8 @@ export const recaps = pgTable(
     sentAt: timestamp("sent_at", { mode: "date", withTimezone: true }),
     sentBy: text("sent_by"),
     sentCount: integer("sent_count").notNull().default(0),
+    /** The job doesn't send this one by itself (races that were already final when automatic recaps started). */
+    skipAuto: boolean("skip_auto").notNull().default(false),
     updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [uniqueIndex("recaps_league_race").on(t.leagueId, t.raceId)],

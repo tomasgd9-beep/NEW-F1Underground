@@ -11,7 +11,7 @@ import { sendInviteEmail, sendMail } from "@/lib/mail";
 import { leagueReminderMessage, reminderEmail, teamStatus } from "@/lib/notify";
 import { upcomingRace } from "@/lib/races";
 import { requireViewer } from "@/lib/session";
-import { saveRecapNote, sendAnnouncement, sendRecapTest, sendRecapToAll } from "@/lib/recap-email";
+import { sendAnnouncement, sendRecapTest, sendRecapToAll } from "@/lib/recap-email";
 import { EMAIL_KINDS, KIND_INFO, getPrefs, setPrefs, unsubscribe, type EmailKind } from "@/lib/email-prefs";
 
 /** Run a league operation and turn rule errors into a message for the form. */
@@ -381,17 +381,13 @@ export async function recapAction(_: ActionResult, f: FormData): Promise<ActionR
   const intent = str(f, "intent");
   const leagueId = v.player.leagueId;
   try {
-    await saveRecapNote(db, leagueId, raceId, note);
-    if (intent === "save") {
-      revalidatePath("/admin");
-      return { ok: "Draft saved. Use Preview to see the email." };
-    }
     if (intent === "test") {
       if (!v.email) return { error: "Your account has no email address." };
       await sendRecapTest(db, leagueId, raceId, note, v.player.displayName, {
         email: v.email,
         name: v.player.displayName,
         playerId: v.player.id,
+        userId: v.userId,
       });
       return { ok: `Test sent to ${v.email}.` };
     }
@@ -399,7 +395,7 @@ export async function recapAction(_: ActionResult, f: FormData): Promise<ActionR
     revalidatePath("/admin");
     const parts = [`Sent to ${res.sent} player${res.sent === 1 ? "" : "s"}.`];
     if (res.failed.length) parts.push(`Couldn't reach ${res.failed.join(", ")}: press Send again to retry them.`);
-    if (!res.sent && !res.failed.length) parts.push("Everyone who gets recaps already has this one.");
+    if (!res.sent && !res.failed.length) parts.splice(0, 1, "Everyone who gets recaps already has this one.");
     return { ok: parts.join(" ") };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
