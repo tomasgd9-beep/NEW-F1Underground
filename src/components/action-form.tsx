@@ -24,7 +24,10 @@ export function ActionForm({
       action={run}
       className={className}
       onSubmit={(e) => {
-        if (confirm && !window.confirm(confirm)) e.preventDefault();
+        // A button can carry its own question (e.g. only "Send to everyone" asks first).
+        const own = ((e.nativeEvent as SubmitEvent).submitter as HTMLElement | null)?.dataset.confirm;
+        const ask = own ?? confirm;
+        if (ask && !window.confirm(ask)) e.preventDefault();
       }}
     >
       {children}
@@ -39,11 +42,14 @@ export function SubmitButton({
   variant = "primary",
   name,
   value,
+  confirm,
 }: {
   children: React.ReactNode;
   variant?: "primary" | "quiet";
   name?: string;
   value?: string;
+  /** Ask this before submitting with this button. */
+  confirm?: string;
 }) {
   const { pending } = useFormStatus();
   const base = "rounded px-2.5 py-1 text-sm font-semibold disabled:opacity-50 whitespace-nowrap";
@@ -52,7 +58,7 @@ export function SubmitButton({
       ? "bg-red text-white hover:brightness-110"
       : "border border-line text-ink hover:bg-black/5 dark:hover:bg-white/5";
   return (
-    <button type="submit" disabled={pending} name={name} value={value} className={`${base} ${look}`}>
+    <button type="submit" disabled={pending} name={name} value={value} data-confirm={confirm} className={`${base} ${look}`}>
       {children}
     </button>
   );

@@ -13,6 +13,7 @@ export type LeagueRace = {
   results: "none" | "live" | "provisional" | "final";
   locked: boolean;
   deadline: string | null;
+  isSprint: boolean;
 };
 export type LeagueAsset = {
   id: string;
@@ -169,6 +170,7 @@ export async function loadLeague(
       results: r.results,
       locked: !!r.lockedAt,
       deadline: r.deadline?.toISOString() ?? null,
+      isSprint: r.isSprint,
     })),
     // A finished season shows only the people who played it.
     players: playerRows

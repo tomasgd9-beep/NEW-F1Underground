@@ -24,16 +24,24 @@ export function TopBar({ race, playerName }: { race: Race; playerName?: string }
             </span>
           )}
           {playerName && (
-            <form
-              action={async () => {
-                "use server";
-                await signOut({ redirectTo: "/signin" });
-              }}
-            >
-              <button className="text-white/60 hover:text-white" title="Sign out">
-                <span className="hidden sm:inline">{playerName} · </span>Sign out
-              </button>
-            </form>
+            <>
+              <Link href="/settings" className="text-white/60 hover:text-white" title="Settings: which emails you get">
+                <span className="hidden sm:inline">{playerName}</span>
+                <span className="sm:hidden" aria-label="Settings">
+                  ⚙
+                </span>
+              </Link>
+              <form
+                action={async () => {
+                  "use server";
+                  await signOut({ redirectTo: "/signin" });
+                }}
+              >
+                <button className="text-white/60 hover:text-white" title="Sign out">
+                  Sign out
+                </button>
+              </form>
+            </>
           )}
         </div>
       </div>

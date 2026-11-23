@@ -364,3 +364,43 @@ export const activityLog = pgTable(
   },
   (t) => [index("activity_log_at").on(t.at)],
 );
+
+/** Which emails a person gets. No row = everything on. The token makes the unsubscribe links work without signing in. */
+export const emailPrefs = pgTable("email_prefs", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** "No emails": overrides the boxes below (they're remembered for when it's turned back on). */
+  allOff: boolean("all_off").notNull().default(false),
+  reminders: boolean("reminders").notNull().default(true),
+  recaps: boolean("recaps").notNull().default(true),
+  announcements: boolean("announcements").notNull().default(true),
+  /** Commissioners only: teams-locked notices and job failure alerts. */
+  commissioner: boolean("commissioner").notNull().default(true),
+  token: text("token")
+    .notNull()
+    .unique()
+    .$defaultFn(() => crypto.randomUUID().replaceAll("-", "")),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+});
+
+/** The weekend recap a commissioner sent (or is drafting) for a race. */
+export const recaps = pgTable(
+  "recaps",
+  {
+    id: serial("id").primaryKey(),
+    leagueId: integer("league_id")
+      .notNull()
+      .references(() => leagues.id),
+    raceId: integer("race_id")
+      .notNull()
+      .references(() => races.id, { onDelete: "cascade" }),
+    /** The commissioner's own lines at the top of the email. */
+    note: text("note").notNull().default(""),
+    sentAt: timestamp("sent_at", { mode: "date", withTimezone: true }),
+    sentBy: text("sent_by"),
+    sentCount: integer("sent_count").notNull().default(0),
+    updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("recaps_league_race").on(t.leagueId, t.raceId)],
+);

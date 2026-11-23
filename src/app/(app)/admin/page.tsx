@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { getDb } from "@/db";
 import { activityLog, invites, picks, players, races, users, xpSnapshots } from "@/db/schema";
@@ -9,6 +9,8 @@ import { currentRace, rowToPicks } from "@/lib/team";
 import { emptySlots } from "@/lib/lineup";
 import { assetPrices } from "@/db/schema";
 import { appUrl } from "@/lib/mail";
+import { getPrefs, KIND_INFO } from "@/lib/email-prefs";
+import { getRecapRow } from "@/lib/recap-email";
 import { requireMember } from "@/lib/session";
 import * as act from "@/app/actions";
 import { Corrections } from "./corrections";
@@ -33,7 +35,7 @@ const chip = "rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking
 export default async function Admin({
   searchParams,
 }: {
-  searchParams: Promise<{ race?: string; asset?: string; player?: string }>;
+  searchParams: Promise<{ race?: string; asset?: string; player?: string; recap?: string }>;
 }) {
   const params = await searchParams;
   const v = await requireMember();
@@ -50,6 +52,7 @@ export default async function Admin({
         role: players.role,
         active: players.active,
         email: users.email,
+        userId: users.id,
         claimEmail: claimant.email,
         joinedAt: races.label,
       })
@@ -152,6 +155,30 @@ export default async function Admin({
     names.set(r.id, r.name);
 
   const claims = roster.filter((p) => p.claimEmail);
+  // Recap: races that are locked and have points, newest first.
+  const recapRaces = boss
+    ? await db
+        .select({ id: races.id, label: races.label, name: races.name, results: races.results })
+        .from(races)
+        .where(and(isNotNull(races.lockedAt), ne(races.results, "none")))
+        .orderBy(desc(races.deadline))
+        .limit(8)
+    : [];
+  const recapRace = recapRaces.find((r) => r.id === Number(params.recap)) ?? recapRaces[0];
+  const recapRow = recapRace ? await getRecapRow(db, leagueId, recapRace.id) : null;
+  // Which emails each signed-in player gets (commissioners only: so they know who to ping in the chat).
+  const mailState = new Map<number, string>();
+  if (boss) {
+    for (const p of roster) {
+      if (!p.userId) continue;
+      const pr = await getPrefs(db, p.userId);
+      const off = (["reminders", "recaps", "announcements"] as const).filter((k) => !pr[k]);
+      mailState.set(
+        p.id,
+        pr.allOff ? "No emails" : off.length ? `No ${off.map((k) => KIND_INFO[k].label.toLowerCase()).join(", ")}` : "All",
+      );
+    }
+  }
   const joinUrl = `${appUrl()}/join/${league.code}`;
 
   return (
@@ -192,6 +219,7 @@ export default async function Admin({
                   <th className="py-1 pr-2 font-semibold">Name</th>
                   <th className="py-1 pr-2 font-semibold">Account</th>
                   {race && <th className="py-1 pr-2 font-semibold whitespace-nowrap">{race.label} team</th>}
+                  {boss && <th className="py-1 pr-2 font-semibold">Emails</th>}
                   {boss && <th className="py-1 font-semibold text-right">Manage</th>}
                 </tr>
               </thead>
@@ -215,6 +243,11 @@ export default async function Admin({
                           const label = boss || race.lockedAt ? st.label : st.tone === "bad" && st.label.startsWith("Nothing") ? st.label : "Saved";
                           return <span className={boss || race.lockedAt ? toneClass[st.tone] : "text-muted"}>{label}</span>;
                         })()}
+                      </td>
+                    )}
+                    {boss && (
+                      <td className={`py-1.5 pr-2 text-xs whitespace-nowrap ${mailState.get(p.id) === "All" ? "text-muted" : "font-semibold text-amber-600 dark:text-amber-400"}`}>
+                        {mailState.get(p.id) ?? ""}
                       </td>
                     )}
                     {boss && (
@@ -306,6 +339,95 @@ export default async function Admin({
             </table>
           </div>
         </Card>
+
+        {boss && (
+          <Card title="Weekend recap" note="the email to everyone after a race">
+            {recapRace ? (
+              <div className="grid gap-2 text-sm">
+                <form method="get" className="flex flex-wrap items-center gap-2">
+                  <select name="recap" defaultValue={recapRace.id} className="rounded border border-line bg-card px-1.5 py-0.5">
+                    {recapRaces.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.label} · {r.results}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="rounded border border-line px-2 py-0.5 text-sm">Open</button>
+                  <span className={recapRow?.sentAt ? "text-up font-semibold" : "text-muted"}>
+                    {recapRow?.sentAt ? `Sent to ${recapRow.sentCount} on ${when(recapRow.sentAt)}` : "Not sent yet"}
+                  </span>
+                </form>
+                {recapRace.results !== "final" && (
+                  <p className="text-xs text-down">Results are still {recapRace.results}: points may change before they&apos;re final.</p>
+                )}
+                <ActionForm
+                  action={act.recapAction}
+                  className="grid gap-2"
+                >
+                  <input type="hidden" name="raceId" value={recapRace.id} />
+                  <label className="grid gap-1">
+                    <span className="text-xs text-muted">
+                      Your lines at the top (banter, corrections, penalties). The podium, highlights, tables, graph and next
+                      race are added for you.
+                    </span>
+                    <textarea
+                      name="note"
+                      rows={4}
+                      defaultValue={recapRow?.note ?? ""}
+                      className="w-full rounded border border-line bg-transparent p-2"
+                      placeholder="Sacadón de Ana con McLaren…"
+                    />
+                  </label>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <SubmitButton name="intent" value="save" variant="quiet">
+                      Save draft
+                    </SubmitButton>
+                    <a
+                      href={`/api/recap-preview/${recapRace.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded border border-line px-2.5 py-1 text-sm font-semibold"
+                    >
+                      Preview
+                    </a>
+                    <SubmitButton name="intent" value="test" variant="quiet">
+                      Send me a test
+                    </SubmitButton>
+                    <SubmitButton
+                      name="intent"
+                      value="send"
+                      confirm={`Email the ${recapRace.label} recap to everyone in the league now?`}
+                    >
+                      {recapRow?.sentAt ? "Send to anyone who missed it" : "Send to everyone"}
+                    </SubmitButton>
+                  </div>
+                  <p className="text-xs text-muted">
+                    Preview shows the last saved draft. Each player gets it once; people who turned recaps off are skipped.
+                  </p>
+                </ActionForm>
+              </div>
+            ) : (
+              <p className="text-sm text-muted">No scored race yet.</p>
+            )}
+          </Card>
+        )}
+
+        {boss && (
+          <Card title="Announcement" note="an email to everyone who gets league announcements">
+            <ActionForm action={act.announceAction} className="grid gap-2 text-sm">
+              <input name="subject" placeholder="Subject" maxLength={120} className="rounded border border-line bg-transparent px-2 py-1" />
+              <textarea name="body" rows={3} placeholder="Message" className="rounded border border-line bg-transparent p-2" />
+              <div className="flex gap-1">
+                <SubmitButton name="intent" value="test" variant="quiet">
+                  Send me a test
+                </SubmitButton>
+                <SubmitButton name="intent" value="send" confirm="Email this announcement to everyone in the league now?">
+                  Send to everyone
+                </SubmitButton>
+              </div>
+            </ActionForm>
+          </Card>
+        )}
 
         {boss && (
           <Card title="Email check">

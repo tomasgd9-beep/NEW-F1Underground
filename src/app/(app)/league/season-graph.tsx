@@ -1,12 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { PALETTE } from "@/lib/palette";
 
 type Metric = "total" | "race" | "rank";
-const PALETTE = [
-  "#e10600", "#1f6feb", "#16a34a", "#f59e0b", "#9333ea", "#0891b2", "#db2777", "#65a30d",
-  "#ea580c", "#4f46e5", "#0d9488", "#be123c", "#a16207", "#7c3aed", "#059669", "#b91c1c",
-];
 
 export function SeasonGraph({
   players,
@@ -138,15 +135,22 @@ export function SeasonGraph({
           ))}
         </svg>
 
-        {/* Standings at the hovered race (or the latest one), sorted like the lines: top of the chart first. */}
+        {/* Standings at the hovered race (or the latest one), sorted like the lines: top of the chart first.
+            Each name shows its points and the gap (to the compared player, or to the leader). */}
         {(() => {
           const at = hover ?? n - 1;
           if (at < 0) return null;
-          const val = (v: number) => (v > 0 && compare && metric !== "rank" ? `+${v}` : v);
+          const fmt = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+          const signed = (v: number) => (v > 0 ? `+${fmt(v)}` : v === 0 ? "0" : `−${fmt(-v)}`);
+          const raw = (id: number) => (metric === "race" ? raceTotals[id] : cumulative[id])?.[at] ?? 0;
+          // Gap reference: the compared player, else whoever leads at this race (among all players).
+          const ref = compare ? raw(compare) : Math.max(...players.map((p) => raw(p.id)));
+          const refName = compare ? players.find((p) => p.id === compare)?.name : "1st";
           return (
-            <div className="mx-3 mb-2 rounded border border-line p-2 text-xs md:mx-0 md:mt-3 md:mr-3 md:mb-3 md:w-max md:max-w-56 md:shrink-0">
+            <div className="mx-3 mb-2 rounded border border-line p-2 text-xs md:mx-0 md:mt-3 md:mr-3 md:mb-3 md:w-max md:max-w-64 md:shrink-0">
               <div className="flex flex-wrap items-baseline gap-x-1">
                 <b>{raceLabels[at]}</b>
+                {metric !== "rank" && <span className="text-[10px] text-muted">· gap to {refName}</span>}
                 {hover == null && (
                   <span className="text-[10px] text-muted md:basis-full">
                     <span className="hidden md:inline">hover</span>
@@ -161,13 +165,31 @@ export function SeasonGraph({
               >
                 {[...series]
                   .sort((a, b) => (metric === "rank" ? a.values[at] - b.values[at] : b.values[at] - a.values[at]))
-                  .map((s) => (
-                    <span key={s.id} className={`flex items-center gap-1 ${s.id === meId ? "font-semibold" : ""}`}>
-                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: colour(s.id) }} />
-                      <span className="truncate">{s.name}</span>
-                      <b className="ml-auto pl-3 tabular-nums">{val(s.values[at])}</b>
-                    </span>
-                  ))}
+                  .map((s) => {
+                    const pts = raw(s.id);
+                    const gap = pts - ref;
+                    return (
+                      <span key={s.id} className={`flex items-center gap-1 ${s.id === meId ? "font-semibold" : ""}`}>
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: colour(s.id) }} />
+                        <span className="truncate">{s.name}</span>
+                        {metric === "rank" ? (
+                          <>
+                            <b className="ml-auto pl-3 tabular-nums">P{s.values[at]}</b>
+                            <span className="w-12 text-right text-muted tabular-nums">{fmt(cumulative[s.id]?.[at] ?? 0)}</span>
+                          </>
+                        ) : (
+                          <>
+                            <b className="ml-auto pl-3 tabular-nums">{fmt(pts)}</b>
+                            <span
+                              className={`w-12 text-right tabular-nums ${gap < 0 ? "text-down" : gap > 0 ? "text-up" : "text-muted"}`}
+                            >
+                              {s.id === compare || (!compare && gap === 0) ? "–" : signed(gap)}
+                            </span>
+                          </>
+                        )}
+                      </span>
+                    );
+                  })}
               </div>
             </div>
           );

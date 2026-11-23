@@ -18,7 +18,8 @@ export default function Privacy() {
         </p>
         <p>
           <b>What it&apos;s for:</b> signing you in, running the league, and sending league emails (sign-in links,
-          invites, deadline reminders). Nothing is sold or shared with anyone outside the league, and there are no ads
+          invites, deadline reminders, race recaps and announcements; choose which you get under Settings, or use the
+          link at the bottom of any email). Nothing is sold or shared with anyone outside the league, and there are no ads
           or trackers.
         </p>
         <p>

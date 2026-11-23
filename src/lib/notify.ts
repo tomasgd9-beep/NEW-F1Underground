@@ -1,14 +1,15 @@
-// Emails the scheduled job sends: the 24-hour deadline reminder, the summary after
-// a race is final, and an alert to commissioners when the job itself fails.
-// Each email goes out once per player per race (the reminders table remembers it).
+// Emails the scheduled job sends: the 24-hour deadline reminder, the teams-locked
+// notice for commissioners, and an alert to commissioners when the job itself fails.
+// (The weekend recap is sent by a commissioner from Admin: see recap-email.ts.)
+// Each email goes out once per player per race (the reminders table remembers it),
+// and only to people whose email settings allow that kind.
 import { and, desc, eq, gt, isNotNull, sql } from "drizzle-orm";
 import type { Db } from "@/db";
-import { activityLog, leagues, picks, players, races, reminders, seasons, users } from "@/db/schema";
-import { loadLeague } from "@/lib/league-data";
+import { activityLog, picks, players, races, reminders, seasons, users } from "@/db/schema";
+import { getPrefs, unsubscribeParts, wants, type EmailKind } from "@/lib/email-prefs";
 import { logActivity } from "@/lib/league";
 import { appUrl, escapeHtml, sendMail } from "@/lib/mail";
 import { budgetPenalty, emptySlots, teamPrice, type Slot } from "@/lib/lineup";
-import { standings, teamScore } from "@/lib/standings";
 import { myPicks, rowToPicks, teamAssets, type Race } from "@/lib/team";
 
 const DAY = 24 * 3600_000;
@@ -27,7 +28,8 @@ export function etTime(d: Date) {
   );
 }
 
-type Recipient = {
+export type Recipient = {
+  userId: string;
   playerId: number;
   leagueId: number;
   name: string;
@@ -35,9 +37,11 @@ type Recipient = {
   role: string;
 };
 
-async function recipients(db: Db): Promise<Recipient[]> {
-  return db
+/** Active, signed-in players; with `kind`, only those whose email settings allow it. */
+export async function recipients(db: Db, kind?: EmailKind): Promise<Recipient[]> {
+  const rows = (await db
     .select({
+      userId: users.id,
       playerId: players.id,
       leagueId: players.leagueId,
       name: players.displayName,
@@ -46,10 +50,14 @@ async function recipients(db: Db): Promise<Recipient[]> {
     })
     .from(players)
     .innerJoin(users, eq(users.id, players.userId))
-    .where(and(eq(players.active, true), isNotNull(users.email))) as Promise<Recipient[]>;
+    .where(and(eq(players.active, true), isNotNull(users.email)))) as Recipient[];
+  if (!kind) return rows;
+  const out: Recipient[] = [];
+  for (const r of rows) if (wants(await getPrefs(db, r.userId), kind)) out.push(r);
+  return out;
 }
 
-async function alreadySent(db: Db, playerId: number, raceId: number, type: string) {
+export async function alreadySent(db: Db, playerId: number, raceId: number, type: string) {
   const [r] = await db
     .select({ id: reminders.id })
     .from(reminders)
@@ -59,7 +67,7 @@ async function alreadySent(db: Db, playerId: number, raceId: number, type: strin
 }
 
 /** Marks first, then sends, so two overlapping runs can't email the same person twice. */
-async function claim(db: Db, playerId: number, raceId: number, type: string) {
+export async function claim(db: Db, playerId: number, raceId: number, type: string) {
   const rows = await db
     .insert(reminders)
     .values({ playerId, raceId, type })
@@ -69,7 +77,7 @@ async function claim(db: Db, playerId: number, raceId: number, type: string) {
 }
 
 /** Sends one email; if it fails, the mark is removed so the next run tries again. */
-async function deliver(db: Db, playerId: number, raceId: number, type: string, send: () => Promise<void>) {
+export async function deliver(db: Db, playerId: number, raceId: number, type: string, send: () => Promise<void>) {
   try {
     await send();
   } catch (e) {
@@ -251,96 +259,20 @@ export async function sendDeadlineReminders(db: Db, now = new Date()) {
   const deadline = race.deadline;
 
   let sent = 0;
-  for (const r of await recipients(db)) {
+  for (const r of await recipients(db, "reminders")) {
     if (await alreadySent(db, r.playerId, race.id, "24h")) continue;
     const status = await teamStatus(db, r.playerId, race);
     if (!(await claim(db, r.playerId, race.id, "24h"))) continue;
     const forLeague =
       r.role === "commissioner" ? await leagueReminderMessage(db, r.leagueId, race, deadline, now) : undefined;
     const mail = reminderEmail(r.name, race, deadline, status, now, forLeague);
-    await deliver(db, r.playerId, race.id, "24h", () => sendMail(r.email, mail.subject, mail.text, mail.html));
+    const foot = await unsubscribeParts(db, r.userId, "reminders");
+    await deliver(db, r.playerId, race.id, "24h", () =>
+      sendMail(r.email, mail.subject, mail.text + foot.text, mail.html + foot.html, foot.extras),
+    );
     sent++;
   }
   if (sent) await logActivity(db, "job", "reminders_sent", { race: race.label, sent });
-  return sent;
-}
-
-/**
- * After a race turns final: each player gets their race score and place, and the
- * top of the season table. Only for races that finished in the last 4 days, so
- * imported history never triggers emails.
- */
-export async function sendRaceSummaries(db: Db, now = new Date()) {
-  if (!canEmail()) return 0;
-  const finals = await db
-    .select()
-    .from(races)
-    .where(
-      and(eq(races.results, "final"), isNotNull(races.lockedAt), gt(races.deadline, new Date(now.getTime() - 4 * DAY))),
-    );
-  let sent = 0;
-  const people = await recipients(db);
-  for (const race of finals) {
-    for (const leagueId of new Set(people.map((p) => p.leagueId))) {
-      const todo = [];
-      for (const r of people.filter((p) => p.leagueId === leagueId)) {
-        if (!(await alreadySent(db, r.playerId, race.id, "summary"))) todo.push(r);
-      }
-      if (!todo.length) continue;
-      const data = await loadLeague(db, leagueId, todo[0].playerId, race.seasonId);
-      if (!data) continue;
-      const upto = data.races.findIndex((x) => x.id === race.id);
-      if (upto < 0) continue;
-      const raceIds = data.races
-        .slice(0, upto + 1)
-        .filter((x) => data.teams[x.id])
-        .map((x) => x.id);
-      const score = (pid: number, rid: number) => {
-        const t = data.teams[rid]?.[pid];
-        return t ? teamScore(t, data.points[rid]) : null;
-      };
-      const ids = data.players.map((p) => p.id);
-      const season = standings(ids, raceIds, score);
-      const raceOnly = standings(ids, [race.id], score);
-      const name = (id: number) => data.players.find((p) => p.id === id)?.name ?? "?";
-      const top = season
-        .slice(0, 5)
-        .map((s) => `${s.rank}. ${name(s.playerId)} ${s.total}`)
-        .join("\n");
-      const winner = raceOnly[0];
-      const [league] = await db.select({ name: leagues.name }).from(leagues).where(eq(leagues.id, leagueId));
-      for (const r of todo) {
-        if (!(await claim(db, r.playerId, race.id, "summary"))) continue;
-        const mine = raceOnly.find((s) => s.playerId === r.playerId);
-        const me = season.find((s) => s.playerId === r.playerId);
-        const move = me?.move ? (me.move > 0 ? ` (up ${me.move})` : ` (down ${-me.move})`) : "";
-        const url = `${appUrl()}/league`;
-        const lines = [
-          `${race.name} is final.`,
-          mine
-            ? `You scored ${mine.total} (${ordinal(mine.rank)} of ${raceOnly.length} this race).`
-            : "You didn't have a team this race.",
-          me ? `Season: ${ordinal(me.rank)}${move}, ${me.total} points.` : "",
-          winner ? `Race winner: ${name(winner.playerId)} with ${winner.total}.` : "",
-        ].filter(Boolean);
-        await deliver(db, r.playerId, race.id, "summary", () =>
-          sendMail(
-            r.email,
-            `${race.label} results: ${mine ? `you scored ${mine.total}` : "final standings"}`,
-            `Hi ${r.name},\n\n${lines.join("\n")}\n\n${league?.name ?? "League"} top 5:\n${top}\n\n${url}\n`,
-            `<p>Hi ${escapeHtml(r.name)},</p><p>${lines.map(escapeHtml).join("<br>")}</p>` +
-              `<p><b>Top 5</b><br>${top.split("\n").map(escapeHtml).join("<br>")}</p><p><a href="${url}">Open the League page</a></p>`,
-          ),
-        );
-        sent++;
-      }
-    }
-    if (sent)
-      await logActivity(db, "job", "summaries_sent", {
-        race: race.label,
-        sent,
-      });
-  }
   return sent;
 }
 
@@ -356,7 +288,7 @@ export async function sendLockNotices(db: Db, now = new Date()) {
     .from(races)
     .where(and(isNotNull(races.lockedAt), gt(races.lockedAt, since), gt(races.deadline, since)));
   let sent = 0;
-  const bosses = (await recipients(db)).filter((r) => r.role === "commissioner");
+  const bosses = (await recipients(db, "commissioner")).filter((r) => r.role === "commissioner");
   for (const race of locked) {
     for (const b of bosses) {
       if (await alreadySent(db, b.playerId, race.id, "locked")) continue;
@@ -364,12 +296,14 @@ export async function sendLockNotices(db: Db, now = new Date()) {
       if (!(await claim(db, b.playerId, race.id, "locked"))) continue;
       const wa = whatsappBlock(message);
       const when = etTime(race.lockedAt!);
+      const foot = await unsubscribeParts(db, b.userId, "commissioner");
       await deliver(db, b.playerId, race.id, "locked", () =>
         sendMail(
           b.email,
           `${race.label} teams locked`,
-          `Hi ${b.name},\n\n${race.name} teams locked at ${when}.\n${wa.text}`,
-          `<p>Hi ${escapeHtml(b.name)},</p><p><b>${escapeHtml(race.name)}</b> teams locked at ${when}.</p>${wa.html}`,
+          `Hi ${b.name},\n\n${race.name} teams locked at ${when}.\n${wa.text}${foot.text}`,
+          `<p>Hi ${escapeHtml(b.name)},</p><p><b>${escapeHtml(race.name)}</b> teams locked at ${when}.</p>${wa.html}${foot.html}`,
+          foot.extras,
         ),
       );
       sent++;
@@ -379,7 +313,7 @@ export async function sendLockNotices(db: Db, now = new Date()) {
   return sent;
 }
 
-function ordinal(n: number) {
+export function ordinal(n: number) {
   const teen = n % 100 >= 11 && n % 100 <= 13;
   const suffix = teen ? "th" : (({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th");
   return `${n}${suffix}`;
@@ -395,18 +329,16 @@ export async function alertCommissioners(db: Db, error: string, now = new Date()
     .orderBy(desc(activityLog.at))
     .limit(1);
   if (last && now.getTime() - last.at.getTime() < DAY / 2) return 0;
-  const bosses = await db
-    .select({ email: users.email, name: players.displayName })
-    .from(players)
-    .innerJoin(users, eq(users.id, players.userId))
-    .where(and(eq(players.role, "commissioner"), eq(players.active, true)));
+  const bosses = (await recipients(db, "commissioner")).filter((r) => r.role === "commissioner");
   const url = `${appUrl()}/admin`;
   for (const b of bosses) {
-    if (!b.email) continue;
+    const foot = await unsubscribeParts(db, b.userId, "commissioner");
     await sendMail(
       b.email,
       "F1 Underground: the score job failed",
-      `Hi ${b.name},\n\nThe scheduled job couldn't update the league:\n${error}\n\nNothing was changed. If f1fantasytools changed its page, points can be entered on the Admin page until it's fixed.\n${url}\n`,
+      `Hi ${b.name},\n\nThe scheduled job couldn't update the league:\n${error}\n\nNothing was changed. If f1fantasytools changed its page, points can be entered on the Admin page until it's fixed.\n${url}\n${foot.text}`,
+      undefined,
+      foot.extras,
     );
   }
   await logActivity(db, "job", "job_alert", { error, sentTo: bosses.length });

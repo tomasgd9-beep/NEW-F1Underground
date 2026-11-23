@@ -43,6 +43,13 @@
       "when": 1795371437919,
       "tag": "0005_kick_sauber_colour",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795449472658,
+      "tag": "0006_email_prefs_recaps",
+      "breakpoints": true
     }
   ]
 }

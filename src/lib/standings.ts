@@ -115,3 +115,17 @@ export function heat(value: number, min: number, max: number): string {
   const t = (value - min) / (max - min); // 0 worst … 1 best
   return `hsl(${Math.round(t * 120)} 60% 45% / 0.22)`;
 }
+
+/**
+ * A team's picks in display order: the ×2 driver first, then the other drivers from
+ * most to fewest points, then the constructor. `v` is the points as scored (×2 doubled).
+ */
+export function orderPicks(
+  picks: TeamPick[],
+  pts: Record<string, number | null> | undefined,
+): (TeamPick & { v: number })[] {
+  const rank: Record<Slot, number> = { x2: 0, d: 1, c: 2 };
+  return picks
+    .map((p) => ({ ...p, v: (pts?.[p.assetId] ?? 0) * (p.slot === "x2" ? 2 : 1) }))
+    .sort((a, b) => rank[a.slot] - rank[b.slot] || b.v - a.v || a.assetId.localeCompare(b.assetId));
+}

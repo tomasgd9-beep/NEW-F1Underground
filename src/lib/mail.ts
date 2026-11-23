@@ -2,6 +2,10 @@
 // The free *.vercel.app address can't be verified with Resend, so sending
 // from an ordinary mailbox is the free option that reaches everyone.
 import nodemailer, { type Transporter } from "nodemailer";
+import type Mail from "nodemailer/lib/mailer";
+
+/** Extra parts of an email: unsubscribe headers, inline images. */
+export type MailExtras = { headers?: Record<string, string>; attachments?: Mail.Attachment[] };
 
 let transport: Transporter | undefined;
 
@@ -18,12 +22,12 @@ export function emailFrom(): string {
   return process.env.EMAIL_FROM ?? "F1 Underground <no-reply@example.com>";
 }
 
-export async function sendMail(to: string, subject: string, text: string, html?: string) {
+export async function sendMail(to: string, subject: string, text: string, html?: string, extras: MailExtras = {}) {
   if (!process.env.EMAIL_SERVER && process.env.NODE_ENV !== "production") {
     console.log(`\n[dev] Email to ${to}: ${subject}\n${text}\n`);
     return;
   }
-  await getTransport().sendMail({ from: emailFrom(), to, subject, text, html });
+  await getTransport().sendMail({ from: emailFrom(), to, subject, text, html, ...extras });
 }
 
 export function appUrl(): string {

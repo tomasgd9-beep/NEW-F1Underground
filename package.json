@@ -18,12 +18,14 @@
     "@auth/drizzle-adapter": "^1.11.3",
     "@fontsource/titillium-web": "^5.3.0",
     "@neondatabase/serverless": "^1.2.1",
+    "@resvg/resvg-js": "^2.6.2",
     "drizzle-orm": "^0.45.4",
     "next": "15.5.29",
     "next-auth": "^5.0.0-beta.32",
     "nodemailer": "^10.6.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "satori": "^0.63.2",
     "zod": "^4.6.7"
   },
   "devDependencies": {

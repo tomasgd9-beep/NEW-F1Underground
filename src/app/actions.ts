@@ -11,6 +11,8 @@ import { sendInviteEmail, sendMail } from "@/lib/mail";
 import { leagueReminderMessage, reminderEmail, teamStatus } from "@/lib/notify";
 import { upcomingRace } from "@/lib/races";
 import { requireViewer } from "@/lib/session";
+import { saveRecapNote, sendAnnouncement, sendRecapTest, sendRecapToAll } from "@/lib/recap-email";
+import { EMAIL_KINDS, KIND_INFO, getPrefs, setPrefs, unsubscribe, type EmailKind } from "@/lib/email-prefs";
 
 /** Run a league operation and turn rule errors into a message for the form. */
 async function attempt(fn: () => Promise<string | void>): Promise<ActionResult> {
@@ -333,4 +335,94 @@ export async function fixTeamAction(_: ActionResult, f: FormData): Promise<Actio
     await fixTeam(getDb(), v.userId, num(f, "raceId"), num(f, "playerId"), team);
     return "Team saved.";
   });
+}
+
+/* ───────────── Email settings ───────────── */
+
+export async function saveEmailPrefs(_: ActionResult, f: FormData): Promise<ActionResult> {
+  const v = await requireViewer();
+  const on = (k: string) => f.get(k) === "on";
+  const db = getDb();
+  // A disabled fieldset isn't submitted: with "No emails" on, keep the boxes as they were.
+  const before = await getPrefs(db, v.userId);
+  const allOff = on("allOff");
+  await setPrefs(
+    db,
+    v.userId,
+    allOff
+      ? { ...before, allOff: true }
+      : { allOff: false, reminders: on("reminders"), recaps: on("recaps"), announcements: on("announcements"), commissioner: on("commissioner") },
+  );
+  revalidatePath("/settings");
+  revalidatePath("/admin");
+  return { ok: allOff ? "Saved: you won't get league emails (sign-in links still arrive)." : "Saved." };
+}
+
+/** From an email's unsubscribe link: no sign-in needed, the token says who. */
+export async function unsubscribeAction(_: ActionResult, f: FormData): Promise<ActionResult> {
+  const kind = str(f, "kind");
+  const k = kind === "all" || (EMAIL_KINDS as readonly string[]).includes(kind) ? (kind as EmailKind | "all") : null;
+  if (!k) return { error: "That link isn't complete." };
+  const ok = await unsubscribe(getDb(), str(f, "t"), k);
+  if (!ok) return { error: "That link doesn't work any more. Sign in and use Settings instead." };
+  return {
+    ok: k === "all" ? "Done: you won't get league emails any more." : `Done: no more ${KIND_INFO[k].label.toLowerCase()} emails.`,
+  };
+}
+
+/* ───────────── Recap and announcements (commissioners) ───────────── */
+
+export async function recapAction(_: ActionResult, f: FormData): Promise<ActionResult> {
+  const v = await requireViewer();
+  if (!v.isCommissioner || !v.player) return { error: "Only commissioners can do that." };
+  const db = getDb();
+  const raceId = num(f, "raceId");
+  const note = str(f, "note").slice(0, 4000);
+  const intent = str(f, "intent");
+  const leagueId = v.player.leagueId;
+  try {
+    await saveRecapNote(db, leagueId, raceId, note);
+    if (intent === "save") {
+      revalidatePath("/admin");
+      return { ok: "Draft saved. Use Preview to see the email." };
+    }
+    if (intent === "test") {
+      if (!v.email) return { error: "Your account has no email address." };
+      await sendRecapTest(db, leagueId, raceId, note, v.player.displayName, {
+        email: v.email,
+        name: v.player.displayName,
+        playerId: v.player.id,
+      });
+      return { ok: `Test sent to ${v.email}.` };
+    }
+    const res = await sendRecapToAll(db, leagueId, raceId, note, v.player.displayName, v.userId);
+    revalidatePath("/admin");
+    const parts = [`Sent to ${res.sent} player${res.sent === 1 ? "" : "s"}.`];
+    if (res.failed.length) parts.push(`Couldn't reach ${res.failed.join(", ")}: press Send again to retry them.`);
+    if (!res.sent && !res.failed.length) parts.push("Everyone who gets recaps already has this one.");
+    return { ok: parts.join(" ") };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function announceAction(_: ActionResult, f: FormData): Promise<ActionResult> {
+  const v = await requireViewer();
+  if (!v.isCommissioner || !v.player) return { error: "Only commissioners can do that." };
+  const subject = str(f, "subject").trim().slice(0, 120);
+  const body = str(f, "body").trim().slice(0, 4000);
+  if (!subject || !body) return { error: "Write a subject and a message." };
+  const db = getDb();
+  try {
+    if (str(f, "intent") === "test") {
+      if (!v.email) return { error: "Your account has no email address." };
+      await sendMail(v.email, `[Test] F1 Underground: ${subject}`, `${body}\n\n— ${v.player.displayName}\n`);
+      return { ok: `Test sent to ${v.email}.` };
+    }
+    const n = await sendAnnouncement(db, v.player.leagueId, subject, body, v.player.displayName, v.userId);
+    revalidatePath("/admin");
+    return { ok: `Sent to ${n} player${n === 1 ? "" : "s"}.` };
+  } catch (e) {
+    return { error: `Sending failed: ${e instanceof Error ? e.message : String(e)}` };
+  }
 }

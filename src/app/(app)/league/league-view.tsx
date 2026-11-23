@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LeagueData, LeagueRace } from "@/lib/league-data";
-import { heat, rankHistory, shareRanks, standings, teamScore, type StandingRow } from "@/lib/standings";
+import { heat, orderPicks, rankHistory, shareRanks, standings, teamScore, type StandingRow } from "@/lib/standings";
 import { SeasonGraph } from "./season-graph";
 import { LeagueHeader } from "@/components/league-header";
 import { RacePicker } from "@/components/race-picker";
+import { SharePanel } from "./share-panel";
 
 const f = (n: number | null | undefined) => (n == null ? "–" : Number.isInteger(n) ? String(n) : n.toFixed(1));
 const neg = (n: number | null | undefined) => (n != null && n < 0 ? "text-down" : "");
@@ -180,6 +181,7 @@ function RaceView({
       <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase ${BADGE[race.results]}`}>
         {race.locked ? (race.results === "none" ? "Locked" : race.results) : "Open"}
       </span>
+      {race.locked && <SharePanel raceId={race.id} raceLabel={race.label} />}
     </div>
   );
 
@@ -237,10 +239,7 @@ function RaceView({
         <ul className="divide-y divide-line">
           {rows.map((r, i) => {
             const team = r.team!;
-            // Drivers by points, high to low (×2 counted doubled), then the constructor.
-            const chips = team.picks
-              .map((p) => ({ ...p, v: (pts[p.assetId] ?? 0) * (p.slot === "x2" ? 2 : 1), a: data.assets[p.assetId] }))
-              .sort((a, b) => Number(a.slot === "c") - Number(b.slot === "c") || b.v - a.v);
+            const chips = orderPicks(team.picks, pts).map((p) => ({ ...p, a: data.assets[p.assetId] }));
             const me = r.pid === data.meId;
             return (
               <li
@@ -465,6 +464,12 @@ function SeasonView({
   const [graph, setGraph] = useState(false);
   // Race table sort: a race column (index into `races`), or null for the standings order.
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
+  // The race grid opens scrolled to the latest races (the Total column stays pinned on the right).
+  const gridRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [from]);
   const races = scoredRaces.slice(Math.max(0, scoredRaces.findIndex((r) => r.id === from)));
   const raceIds = races.map((r) => r.id);
   const rows: StandingRow[] = useMemo(() => standings(playerIds, raceIds, scoreOf), [from]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -500,11 +505,8 @@ function SeasonView({
             ))}
           </select>
         </label>
-        <button
-          type="button"
-          onClick={() => setGraph(true)}
-          className="ml-auto rounded bg-navy px-3 py-1 font-semibold text-white"
-        >
+        <SharePanel raceId={scoredRaces.at(-1)!.id} raceLabel={scoredRaces.at(-1)!.label} />
+        <button type="button" onClick={() => setGraph(true)} className="rounded bg-navy px-3 py-1 font-semibold text-white">
           Graph
         </button>
       </div>
@@ -514,33 +516,33 @@ function SeasonView({
           <thead className="text-xs text-muted">
             <tr>
               <th className="py-1 pl-3 text-left font-semibold">#</th>
+              <th className="w-8 px-1 text-left font-semibold" title="Places moved since the previous race">±</th>
               <th className="px-1.5 text-left font-semibold sm:px-2">Player</th>
               <th className="px-1.5 text-right font-semibold sm:px-2">Total</th>
               <th className="px-1.5 text-right font-semibold sm:px-2" title="Points behind the player above">Gap</th>
               <th className="px-1.5 text-right font-semibold whitespace-nowrap sm:px-2">Gap 1st</th>
-              <th className="hidden px-2 text-right font-semibold sm:table-cell">Last race</th>
-              <th className="pr-3 text-right font-semibold">±</th>
+              <th className="hidden pr-3 pl-2 text-right font-semibold sm:table-cell">Last race</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.playerId} className={`border-t border-line ${r.playerId === data.meId ? "bg-red/5 font-semibold" : ""}`}>
                 <td className="py-1.5 pl-3 font-bold text-muted">{r.rank}</td>
+                <td className="px-1 text-xs whitespace-nowrap">
+                  <Move m={r.move} />
+                </td>
                 <td className="max-w-[9rem] truncate px-1.5 sm:max-w-none sm:px-2">{name(r.playerId)}</td>
                 <td className={`px-1.5 text-right font-bold sm:px-2 ${neg(r.total)}`}>{f(r.total)}</td>
                 <td className="px-1.5 text-right font-semibold sm:px-2">{r.gapAbove == null ? "" : r.gapAbove === 0 ? "0" : `−${f(r.gapAbove)}`}</td>
                 <td className="px-1.5 text-right text-muted sm:px-2">{r.gapLeader == null ? "" : r.gapLeader === 0 ? "0" : `−${f(r.gapLeader)}`}</td>
-                <td className={`hidden px-2 text-right sm:table-cell ${neg(r.lastRace)}`}>{f(r.lastRace)}</td>
-                <td className="pr-3 text-right text-xs">
-                  <Move m={r.move} />
-                </td>
+                <td className={`hidden pr-3 pl-2 text-right sm:table-cell ${neg(r.lastRace)}`}>{f(r.lastRace)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-line bg-card">
+      <div ref={gridRef} className="overflow-x-auto rounded-lg border border-line bg-card">
         <table className="text-sm">
           <thead className="text-xs text-muted">
             <tr>
@@ -562,6 +564,16 @@ function SeasonView({
                   </button>
                 </th>
               ))}
+              <th className="sticky right-0 border-l border-line bg-card px-2 text-right font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setSort(null)}
+                  className={`rounded px-1 py-0.5 ${sort == null ? "bg-navy text-white" : "hover:text-ink"}`}
+                  title="Sort by season total"
+                >
+                  Total
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -588,6 +600,9 @@ function SeasonView({
                     </td>
                   );
                 })}
+                <td className={`sticky right-0 border-l border-line bg-card px-2 text-right font-bold ${neg(r.total)}`}>
+                  {f(r.total)}
+                </td>
               </tr>
             ))}
           </tbody>

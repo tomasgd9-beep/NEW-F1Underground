@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/db";
-import { picks, players, races, seasons } from "@/db/schema";
+import { emailPrefs, picks, players, races, seasons, users } from "@/db/schema";
 import { ensureBootstrapCommissioner, getLeague, joinAsNewPlayer } from "@/lib/league";
 import { makeUser, testDb } from "./helpers";
 
@@ -13,7 +13,8 @@ vi.mock("@/lib/mail", async (orig) => ({
     sent.push({ to, subject, text });
   },
 }));
-const { alertCommissioners, sendDeadlineReminders, sendLockNotices, sendRaceSummaries } = await import("@/lib/notify");
+const { alertCommissioners, sendDeadlineReminders, sendLockNotices } = await import("@/lib/notify");
+const prefs = await import("@/lib/email-prefs");
 
 let db: Db;
 let seasonId: number;
@@ -54,22 +55,38 @@ describe("deadline reminders", () => {
   });
 });
 
-describe("race summaries", () => {
-  it("are sent once for a race that just turned final, never for old imported races", async () => {
-    const lockedAt = new Date("2026-11-08T17:00:00Z");
-    await db.insert(races).values({
-      seasonId,
-      round: 20,
-      label: "R22 BRA",
-      name: "São Paulo Grand Prix",
-      deadline: lockedAt,
-      lockedAt,
-      results: "final",
-    });
-    expect(await sendRaceSummaries(db, now)).toBe(0); // 12 days old
-    expect(await sendRaceSummaries(db, new Date("2026-11-09T12:00:00Z"))).toBe(2);
-    expect(sent[0].subject).toContain("R22 BRA");
-    expect(await sendRaceSummaries(db, new Date("2026-11-09T13:00:00Z"))).toBe(0);
+describe("email settings", () => {
+  const userId = async (email: string) => (await db.select().from(users).where(eq(users.email, email)))[0].id;
+  const vegas = () =>
+    db
+      .insert(races)
+      .values({ seasonId, round: 21, label: "R23 VEG", name: "Las Vegas Grand Prix", deadline: new Date("2026-11-21T04:00:00Z") })
+      .returning();
+
+  it("skip people who turned that kind off, or chose no emails", async () => {
+    await vegas();
+    const ana = await userId("a@example.com");
+    await prefs.setPrefs(db, ana, { ...prefs.DEFAULT_PREFS, reminders: false });
+    expect(await sendDeadlineReminders(db, now)).toBe(1);
+    expect(sent.map((m) => m.to)).toEqual(["t@example.com"]);
+    // Every email carries the links to opt out.
+    expect(sent[0].text).toContain("/unsubscribe?t=");
+    expect(sent[0].text).toContain("kind=reminders");
+    expect(sent[0].text).toContain("/settings");
+  });
+
+  it("unsubscribe links turn off one kind, or everything, without signing in", async () => {
+    await vegas();
+    const tomas = await userId("t@example.com");
+    await prefs.unsubscribeParts(db, tomas, "reminders"); // creates the token
+    const [row] = await db.select().from(emailPrefs).where(eq(emailPrefs.userId, tomas));
+    expect(await prefs.unsubscribe(db, "wrong", "reminders")).toBe(false);
+    expect(await prefs.unsubscribe(db, row.token, "reminders")).toBe(true);
+    expect(await prefs.getPrefs(db, tomas)).toMatchObject({ allOff: false, reminders: false, recaps: true });
+    await prefs.unsubscribe(db, row.token, "all");
+    expect(prefs.wants(await prefs.getPrefs(db, tomas), "recaps")).toBe(false);
+    expect(await sendDeadlineReminders(db, now)).toBe(1); // only Ana
+    expect(await alertCommissioners(db, "boom")).toBe(0); // Tomas is the only commissioner
   });
 });
 

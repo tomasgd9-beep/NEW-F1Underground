@@ -22,7 +22,10 @@ emailed link) · a scheduled GitHub Actions job (from phase 3).
    season graph with compare-with, league code with Copy link, season chip.
 5. History import, past seasons (season chip on League), replay test
    against the sheet.
-6. Reminder and post-race emails.
+6. **Emails and sharing** (done): 24-hour reminder, teams-locked notice, weekend
+   recap sent from Admin (your lines + podium, highlights, tables, graph, next
+   race), announcements, email settings with one-click unsubscribe, and share
+   images (Highlights, Race, Season, Graph) on the League page.
 7. Soft launch alongside the sheet.
 
 ## Layout
