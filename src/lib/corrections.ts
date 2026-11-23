@@ -292,3 +292,34 @@ export async function overridePrice(db: Db, userId: string, raceId: number, asse
   );
   return final;
 }
+
+/**
+ * "Move to next race": the fallback when f1fantasytools never marks a race finished. The open
+ * race is closed with the points it has now (they count as final, and corrections still work),
+ * the next race is priced from them and opens. Only for a race whose teams are locked.
+ */
+export async function closeRace(db: Db, userId: string, raceId: number) {
+  const me = await requireCommissioner(db, userId);
+  const race = await raceById(db, raceId);
+  const { currentRace } = await import("@/lib/team");
+  const cur = await currentRace(db);
+  if (!cur || cur.id !== race.id) throw new LeagueError(`${race.label} isn't the race the league is on.`);
+  if (!race.lockedAt) throw new LeagueError(`${race.label} isn't locked yet. Lock it first.`);
+  if (race.results === "final") throw new LeagueError(`${race.label} is already final.`);
+  await db
+    .update(races)
+    .set({ results: "final", status: "completed", closedByHand: true })
+    .where(eq(races.id, race.id));
+  await db.update(assetPoints).set({ isFinal: true }).where(eq(assetPoints.raceId, race.id));
+  const [closed] = await db.select().from(races).where(eq(races.id, race.id));
+  const priced = await priceNextRace(db, closed);
+  const next = await currentRace(db);
+  await logActivity(
+    db,
+    userId,
+    "race_closed_by_hand",
+    { race: race.label, wasResults: race.results, next: next?.label ?? null, priced: priced?.priced ?? 0 },
+    { leagueId: me.leagueId },
+  );
+  return { race: race.label, next: next?.label ?? null, priced: priced?.priced ?? 0 };
+}

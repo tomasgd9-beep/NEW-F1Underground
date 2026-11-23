@@ -14,6 +14,7 @@ import { getRecapRow } from "@/lib/recap-email";
 import { requireMember } from "@/lib/session";
 import * as act from "@/app/actions";
 import { Corrections } from "./corrections";
+import { missingPointsThisSeason } from "@/lib/availability";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -85,6 +86,7 @@ export default async function Admin({
   ]);
 
   const race = await currentRace(db);
+  const missing = await missingPointsThisSeason(db);
   // Where each player's team stands for the current race (the column in Players).
   const teamState = new Map<number, { label: string; tone: "ok" | "warn" | "bad" | "muted" }>();
   if (race) {
@@ -426,6 +428,13 @@ export default async function Admin({
         )}
 
         <Card title="Race control" note="the job runs every 5 minutes">
+          {missing.map((m) => (
+            <p key={m.raceId} className="mb-2 rounded border border-down/40 bg-down/10 px-2 py-1.5 text-sm">
+              <b className="text-down">Points missing:</b> no points for <b>{m.tickers.join(", ")}</b> in {m.race}, although
+              it&apos;s final and players picked {m.tickers.length > 1 ? "them" : "it"}. Enter them in Corrections → Correct
+              points if they really scored.
+            </p>
+          ))}
           {race ? (
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
               <dt className="text-muted">Race</dt>
@@ -480,7 +489,22 @@ export default async function Admin({
                     <SubmitButton variant="quiet">Lock now</SubmitButton>
                   </ActionForm>
                 )}
+                {race && race.lockedAt && race.results !== "final" && (
+                  <ActionForm
+                    action={act.closeRaceAction}
+                    confirm={`Move to the next race?\n\n${race.label} closes with the points it has now (they become final), the next race's prices are worked out from them, and the next race opens for teams.\n\nPoints can still be corrected afterwards, but prices won't change again. Only do this if f1fantasytools is stuck and never marks ${race.label} finished.`}
+                  >
+                    <input type="hidden" name="raceId" value={race.id} />
+                    <SubmitButton variant="quiet">Move to next race</SubmitButton>
+                  </ActionForm>
+                )}
               </div>
+              {race && race.lockedAt && race.results !== "final" && (
+                <p className="mt-1 text-xs text-muted">
+                  The job moves on by itself once f1fantasytools marks {race.label} finished. Move to next race is the
+                  fallback if it never does.
+                </p>
+              )}
               {race && (
                 <>
                   <details className="mt-3">

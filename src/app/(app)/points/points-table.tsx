@@ -208,9 +208,18 @@ export function PointsTable({
                       }),
                     )}
                     <td className={`px-2 text-right font-bold ${neg(r.total)}`}>{f(r.total)}</td>
-                    <td className={`${STAT} px-2 text-right ${neg(r.season)}`}>{f(r.season)}</td>
-                    <td className={`${STAT} px-2 text-right ${neg(r.last3)}`}>{f(r.last3)}</td>
-                    <td className={`${STAT} px-2 text-right text-muted`}>{r.races}</td>
+                    <td className={`${STAT} px-2 text-right ${neg(r.season)}`}>
+                      {f(r.season)}
+                      <Now v={r.now && f(r.now.season)} />
+                    </td>
+                    <td className={`${STAT} px-2 text-right ${neg(r.last3)}`}>
+                      {f(r.last3)}
+                      <Now v={r.now && f(r.now.last3)} />
+                    </td>
+                    <td className={`${STAT} px-2 text-right text-muted`}>
+                      {r.races}
+                      <Now v={r.now && String(r.now.races)} />
+                    </td>
                     {locked && isDriver && (
                       <td className={`px-2 text-right ${r.doubled ? "font-semibold text-red" : "text-muted"}`}>{r.doubled}</td>
                     )}
@@ -226,6 +235,12 @@ export function PointsTable({
                         <div className="md:hidden">
                           <Detail row={r} />
                         </div>
+                        {r.now && (
+                          <div className="mt-1 lg:hidden">
+                            <span className="text-muted">Now:</span> Season <b>{f(r.now.season)}</b> · Last 3{" "}
+                            <b>{f(r.now.last3)}</b> · Races <b>{r.now.races}</b>
+                          </div>
+                        )}
                         <PickedBy row={r} />
                       </td>
                     </tr>
@@ -240,7 +255,14 @@ export function PointsTable({
       <p className="border-t border-line px-3 py-1.5 text-[11px] text-muted">
         <span className="md:hidden">Tap a row for the session breakdown and who picked it. </span>
         <span className="hidden md:inline">Click a row to see who picked it. </span>
-        Season, Last 3 races and Races: as of {raceLabel} (this race and the ones before it). Every column header sorts.
+        Season, Last 3 races and Races: as of {raceLabel} (this race and the ones before it)
+        {rows.some((r) => r.now) && (
+          <>
+            <span className="hidden lg:inline">; the small figure underneath is now</span>
+            <span className="lg:hidden">; tap a row for the figures now</span>
+          </>
+        )}
+        . Every column header sorts.
         {locked
           ? isDriver
             ? " Picked by ×2 / ×1: how many players have them in their team this race, as their ×2 driver or as a regular pick."
@@ -249,6 +271,12 @@ export function PointsTable({
       </p>
     </section>
   );
+}
+
+/** The figure as it stands now, under the "as of" one (wide screens; phones get it in the row details). */
+function Now({ v }: { v: string | null }) {
+  if (v == null) return null;
+  return <span className="hidden text-[11px] leading-none font-normal text-muted lg:block">{v} now</span>;
 }
 
 function PickedBy({ row }: { row: PointsRow }) {

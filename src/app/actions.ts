@@ -422,3 +422,41 @@ export async function announceAction(_: ActionResult, f: FormData): Promise<Acti
     return { error: `Sending failed: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
+
+export async function closeRaceAction(_: ActionResult, f: FormData): Promise<ActionResult> {
+  return attempt(async () => {
+    const v = await commissionerOrError();
+    const { closeRace } = await import("@/lib/corrections");
+    const r = await closeRace(getDb(), v.userId, num(f, "raceId"));
+    revalidatePath("/team");
+    revalidatePath("/points");
+    revalidatePath("/league");
+    return r.next
+      ? `${r.race} is closed. ${r.next} is open${r.priced ? ` and priced (${r.priced} assets)` : ""}.`
+      : `${r.race} is closed. That was the last race of the season.`;
+  });
+}
+
+export async function setOutAction(_: ActionResult, f: FormData): Promise<ActionResult> {
+  return attempt(async () => {
+    const v = await commissionerOrError();
+    const { setOut } = await import("@/lib/availability");
+    const scope = str(f, "scope") === "inactive" ? "inactive" : "weekend";
+    const r = await setOut(getDb(), v.userId, str(f, "asset"), scope);
+    revalidatePath("/team");
+    const who = r.affected
+      ? ` ${r.affected} saved team${r.affected > 1 ? "s have" : " has"} them; ${r.emailed} email${r.emailed === 1 ? "" : "s"} sent.`
+      : " Nobody had them in their saved team.";
+    return `${r.ticker} is out ${scope === "inactive" ? "until you turn them back on" : `for ${r.race}`}.${who}`;
+  });
+}
+
+export async function clearOutAction(_: ActionResult, f: FormData): Promise<ActionResult> {
+  return attempt(async () => {
+    const v = await commissionerOrError();
+    const { clearOut } = await import("@/lib/availability");
+    const t = await clearOut(getDb(), v.userId, num(f, "outId"));
+    revalidatePath("/team");
+    return `${t} is back in.`;
+  });
+}

@@ -1,7 +1,8 @@
 // My team: which race is open, the asset list with prices and points, and saving picks.
-import { and, asc, desc, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import {
+  assetOuts,
   assetPoints,
   assetPrices,
   constructors,
@@ -68,8 +69,42 @@ export function isLocked(race: Pick<Race, "deadline" | "lockedAt">, now = new Da
 
 const n = (v: string | number | null | undefined) => (v == null ? 0 : Number(v));
 
-/** Every pickable asset for a race with its price, Season, Last 3 and price move. */
+/**
+ * Who a commissioner took out for a race: "p<personId>" / "c<constructorId>" → "weekend"
+ * (this race only) or "inactive" (until turned back on).
+ */
+export async function outsFor(db: Db, raceId: number): Promise<Map<string, "weekend" | "inactive">> {
+  const rows = await db
+    .select()
+    .from(assetOuts)
+    .where(or(eq(assetOuts.raceId, raceId), isNull(assetOuts.raceId)));
+  const out = new Map<string, "weekend" | "inactive">();
+  for (const r of rows) {
+    const k = r.personId ? `p${r.personId}` : `c${r.constructorId}`;
+    if (out.get(k) !== "inactive") out.set(k, r.raceId ? "weekend" : "inactive");
+  }
+  return out;
+}
+
+/**
+ * Every asset for a race with its price, Season, Last 3 and price move. Assets that aren't
+ * racing (taken out by a commissioner, or dropped by f1fantasytools while still in someone's
+ * saved team) come back with `out` set: they show in that team but can't be picked.
+ */
 export async function teamAssets(db: Db, race: Race): Promise<TeamAsset[]> {
+  const outs = await outsFor(db, race.id);
+  // Stints and teams still in a saved team for this race, even if f1fantasytools dropped them.
+  const saved = await db.select().from(picksTable).where(eq(picksTable.raceId, race.id));
+  const savedStints = [
+    ...new Set(
+      saved.flatMap((p) =>
+        [p.doubleStintId, p.driver1StintId, p.driver2StintId, p.driver3StintId, p.driver4StintId].filter(
+          (v): v is number => v != null,
+        ),
+      ),
+    ),
+  ];
+  const savedCons = [...new Set(saved.map((p) => p.constructorId).filter((v): v is number => v != null))];
   const driverRows = await db
     .select({
       stintId: stints.id,
@@ -78,12 +113,21 @@ export async function teamAssets(db: Db, race: Race): Promise<TeamAsset[]> {
       name: people.fullName,
       team: constructors.name,
       colour: constructors.colour,
+      current: sql<boolean>`${stints.active} and ${stints.lastRaceId} is null`,
     })
     .from(stints)
     .innerJoin(people, eq(people.id, stints.personId))
     .innerJoin(constructors, eq(constructors.id, stints.constructorId))
-    .where(and(eq(stints.active, true), isNull(stints.lastRaceId)));
-  const teamRows = await db.select().from(constructors).where(eq(constructors.active, true));
+    .where(
+      or(
+        and(eq(stints.active, true), isNull(stints.lastRaceId)),
+        savedStints.length ? inArray(stints.id, savedStints) : sql`false`,
+      ),
+    );
+  const teamRows = await db
+    .select()
+    .from(constructors)
+    .where(or(eq(constructors.active, true), savedCons.length ? inArray(constructors.id, savedCons) : sql`false`));
 
   // Races of this season before this one, newest first: for Last 3 and the previous price.
   const earlier = await db
@@ -160,6 +204,7 @@ export async function teamAssets(db: Db, race: Race): Promise<TeamAsset[]> {
       personId: d.personId,
       season: n(P.season.get(d.personId)),
       last3: n(P.last3.get(d.personId)),
+      ...(!d.current ? { out: "fft" as const } : outs.has(`p${d.personId}`) ? { out: outs.get(`p${d.personId}`) } : {}),
     });
   }
   for (const c of teamRows) {
@@ -175,6 +220,7 @@ export async function teamAssets(db: Db, race: Race): Promise<TeamAsset[]> {
       move: p.move,
       season: n(C.season.get(c.id)),
       last3: n(C.last3.get(c.id)),
+      ...(!c.active ? { out: "fft" as const } : outs.has(`c${c.id}`) ? { out: outs.get(`c${c.id}`) } : {}),
     });
   }
   return out.sort((a, b) => b.price - a.price || a.ticker.localeCompare(b.ticker));

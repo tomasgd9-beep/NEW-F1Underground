@@ -18,6 +18,8 @@ export type PointsRow = {
   season: number;
   last3: number;
   races: number;
+  /** The same three figures as they stand now (only when an earlier race is chosen). */
+  now: { season: number; last3: number; races: number } | null;
   picked: number | null;
   doubled: number | null;
   /** Who picked it (locked races only): as ×2 and as a regular pick. */
@@ -38,9 +40,14 @@ export async function pointsForRace(db: Db, raceId: number, leagueId: number): P
   const [race] = await db.select().from(races).where(eq(races.id, raceId));
   if (!race) return [];
   // As of this race: a past race shows the standings as they were after it.
-  const seasonRaces = (await scoredRaces(db, race.seasonId)).filter((r) => r.round <= race.round);
+  const allScored = await scoredRaces(db, race.seasonId);
+  const seasonRaces = allScored.filter((r) => r.round <= race.round);
   const scoredIds = seasonRaces.map((r) => r.id);
   const last3Ids = scoredIds.slice(0, 3);
+  // A race before the latest one also gets the figures as they stand now.
+  const isLatest = allScored[0]?.id === race.id;
+  const nowIds = allScored.map((r) => r.id);
+  const nowLast3 = nowIds.slice(0, 3);
 
   const all = scoredIds.length
     ? await db
@@ -54,12 +61,29 @@ export async function pointsForRace(db: Db, raceId: number, leagueId: number): P
         })
         .from(assetPoints)
         .leftJoin(stints, eq(stints.id, assetPoints.stintId))
-        .where(inArray(assetPoints.raceId, scoredIds))
+        .where(inArray(assetPoints.raceId, isLatest ? scoredIds : nowIds))
     : [];
+  const sumUp = (raceIds: number[], last3: number[]) => {
+    const season = new Map<string, number>();
+    const l3 = new Map<string, number>();
+    const count = new Map<string, Set<number>>();
+    for (const p of all) {
+      if (!raceIds.includes(p.raceId)) continue;
+      const k = p.personId ? `p${p.personId}` : `c${p.constructorId}`;
+      season.set(k, (season.get(k) ?? 0) + n(p.total));
+      count.set(k, (count.get(k) ?? new Set()).add(p.raceId));
+      if (last3.includes(p.raceId)) l3.set(k, (l3.get(k) ?? 0) + n(p.total));
+    }
+    return { season, l3, count };
+  };
+  const NOW = isLatest ? null : sumUp(nowIds, nowLast3);
+  const nowOf = (k: string) =>
+    NOW ? { season: NOW.season.get(k) ?? 0, last3: NOW.l3.get(k) ?? 0, races: NOW.count.get(k)?.size ?? 0 } : null;
   const seasonBy = new Map<string, number>();
   const last3By = new Map<string, number>();
   const racesBy = new Map<string, Set<number>>();
   for (const p of all) {
+    if (!scoredIds.includes(p.raceId)) continue;
     const k = p.personId ? `p${p.personId}` : `c${p.constructorId}`;
     seasonBy.set(k, (seasonBy.get(k) ?? 0) + n(p.total));
     racesBy.set(k, (racesBy.get(k) ?? new Set()).add(p.raceId));
@@ -128,6 +152,7 @@ export async function pointsForRace(db: Db, raceId: number, leagueId: number): P
         season: seasonBy.get(`p${s.personId}`) ?? 0,
         last3: last3By.get(`p${s.personId}`) ?? 0,
         races: racesBy.get(`p${s.personId}`)?.size ?? 0,
+        now: nowOf(`p${s.personId}`),
         picked: race.lockedAt ? pickCount.get(k) ?? 0 : null,
         doubled: race.lockedAt ? doubleCount.get(k) ?? 0 : null,
         pickedBy: race.lockedAt ? { x2: byX2.get(k) ?? [], x1: byX1.get(k) ?? [] } : null,
@@ -148,6 +173,7 @@ export async function pointsForRace(db: Db, raceId: number, leagueId: number): P
         season: seasonBy.get(k) ?? 0,
         last3: last3By.get(k) ?? 0,
         races: racesBy.get(k)?.size ?? 0,
+        now: nowOf(k),
         picked: race.lockedAt ? pickCount.get(k) ?? 0 : null,
         doubled: null,
         pickedBy: race.lockedAt ? { x2: [], x1: byX1.get(k) ?? [] } : null,

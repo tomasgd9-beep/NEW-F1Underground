@@ -57,6 +57,13 @@
       "when": 1795450741535,
       "tag": "0007_recap_auto",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795465784659,
+      "tag": "0008_driver_availability",
+      "breakpoints": true
     }
   ]
 }

@@ -9,7 +9,7 @@ import { activityLog, picks, players, races, reminders, seasons, users } from "@
 import { getPrefs, unsubscribeParts, wants, type EmailKind } from "@/lib/email-prefs";
 import { logActivity } from "@/lib/league";
 import { appUrl, escapeHtml, sendMail } from "@/lib/mail";
-import { budgetPenalty, emptySlots, teamPrice, type Slot } from "@/lib/lineup";
+import { SLOTS, budgetPenalty, emptySlots, teamPrice, type Slot } from "@/lib/lineup";
 import { myPicks, rowToPicks, teamAssets, type Race } from "@/lib/team";
 
 const DAY = 24 * 3600_000;
@@ -101,6 +101,8 @@ export type TeamStatus = {
   /** Points lost to the budget rule (0 or negative). */
   penalty: number;
   budget: number;
+  /** Saved picks that aren't racing this weekend (they'd score 0). */
+  out?: string[];
 };
 
 const SLOT_LABEL: Record<Slot, string> = { double: "D1 (×2)", d1: "D2", d2: "D3", d3: "D4", d4: "D5", team: "C" };
@@ -119,6 +121,10 @@ export async function teamStatus(db: Db, playerId: number, race: Race): Promise<
     price,
     penalty: budgetPenalty(price, budget),
     budget,
+    out: SLOTS.map((x) => picks[x])
+      .map((id) => (id ? byId.get(id) : undefined))
+      .filter((a) => a?.out)
+      .map((a) => a!.ticker),
   };
 }
 
@@ -133,6 +139,12 @@ export function statusLines(t: TeamStatus): string[] {
     out.push(
       `Your team has ${n} empty slot${n > 1 ? "s" : ""} (${t.empty.join(", ")}). ` +
         `If you leave ${n > 1 ? "them" : "it"} empty, ${n > 1 ? "they'll" : "it'll"} be filled automatically at the deadline with the best picks your budget allows.`,
+    );
+  }
+  if (t.out?.length) {
+    const n = t.out.length;
+    out.push(
+      `${t.out.join(", ")} ${n > 1 ? "aren't" : "isn't"} racing this weekend. Swap them out before the deadline, or they stay in your team and score 0.`,
     );
   }
   if (t.penalty < 0) {
@@ -162,7 +174,8 @@ export function reminderEmail(
   const hours = hoursUntil(deadline, now);
   const url = `${appUrl()}/team`;
   const lines = statusLines(status);
-  const action = !status.saved || status.empty.length || status.penalty < 0 ? "Fix my team" : "Open My team";
+  const action =
+    !status.saved || status.empty.length || status.penalty < 0 || status.out?.length ? "Fix my team" : "Open My team";
   const wa = leagueMessage ? whatsappBlock(leagueMessage) : { text: "", html: "" };
   return {
     subject: `F1 Underground deadline - ${race.label} locks in ${hours}hs`,

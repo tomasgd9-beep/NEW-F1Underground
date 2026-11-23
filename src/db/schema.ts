@@ -118,6 +118,8 @@ export const races = pgTable(
     deadlineManual: boolean("deadline_manual").notNull().default(false),
     lockedAt: timestamp("locked_at", { mode: "date", withTimezone: true }),
     results: resultsState("results").notNull().default("none"),
+    /** A commissioner closed it with "Move to next race": it stays final whatever f1fantasytools says. */
+    closedByHand: boolean("closed_by_hand").notNull().default(false),
   },
   (t) => [uniqueIndex("races_season_round").on(t.seasonId, t.round)],
 );
@@ -223,6 +225,24 @@ export const pricePeers = pgTable("price_peers", {
     .notNull()
     .references(() => seasons.id),
 });
+
+/**
+ * A driver or team a commissioner took out of the picker: for one race ("not racing this
+ * weekend", raceId set) or until turned back on (raceId empty). f1fantasytools' own
+ * active flag still applies on top of this.
+ */
+export const assetOuts = pgTable(
+  "asset_outs",
+  {
+    id: serial("id").primaryKey(),
+    personId: integer("person_id").references(() => people.id),
+    constructorId: integer("constructor_id").references(() => constructors.id),
+    raceId: integer("race_id").references(() => races.id, { onDelete: "cascade" }),
+    setBy: text("set_by").notNull(),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [check("asset_outs_one_asset", sql`(${t.personId} is null) <> (${t.constructorId} is null)`)],
+);
 
 /**
  * A league. Only F1 Underground for now, but every membership, invite and log

@@ -13,6 +13,12 @@ export type LineupAsset = {
   id: AssetId;
   kind: "driver" | "constructor";
   price: number;
+  /**
+   * Not racing this race: taken out by a commissioner ("weekend" for this race only,
+   * "inactive" until turned back on) or dropped by f1fantasytools ("fft"). Only present
+   * when someone's saved team still has them; they can't be picked.
+   */
+  out?: "weekend" | "inactive" | "fft";
 };
 
 export type Issue =
@@ -20,7 +26,8 @@ export type Issue =
   | { code: "double_not_driver"; assetId: AssetId }
   | { code: "double_price_cap"; assetId: AssetId; price: number }
   | { code: "wrong_kind"; slot: Slot; assetId: AssetId }
-  | { code: "unknown_asset"; slot: Slot; assetId: AssetId };
+  | { code: "unknown_asset"; slot: Slot; assetId: AssetId }
+  | { code: "not_racing"; slot: Slot; assetId: AssetId };
 
 export const driverId = (stintId: number): AssetId => `s${stintId}`;
 export const constructorAssetId = (constructorId: number): AssetId => `c${constructorId}`;
@@ -64,6 +71,7 @@ export function lineupIssues(
       issues.push({ code: "unknown_asset", slot, assetId: id });
       continue;
     }
+    if (a.out) issues.push({ code: "not_racing", slot, assetId: id });
     if (seen.has(id)) issues.push({ code: "duplicate", assetId: id });
     seen.add(id);
     if (slot === "double") {
@@ -108,5 +116,7 @@ export function describeIssue(i: Issue, name: (id: AssetId) => string, doubleCap
       return i.slot === "team" ? "The constructor slot takes a constructor." : "Driver slots take drivers.";
     case "unknown_asset":
       return "One of your picks is no longer available; pick someone else.";
+    case "not_racing":
+      return `${name(i.assetId)} isn't racing this weekend: swap them out, or they score 0.`;
   }
 }

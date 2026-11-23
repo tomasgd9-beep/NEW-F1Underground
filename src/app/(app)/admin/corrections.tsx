@@ -7,7 +7,8 @@ import { assetPoints, assetPrices, people, players, pricePeers, races, seasons }
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { utcToTorontoInput } from "@/lib/corrections";
 import { SLOTS, type Slot } from "@/lib/lineup";
-import { myPicks, rowToPicks, teamAssets } from "@/lib/team";
+import { currentRace, isLocked, myPicks, rowToPicks, teamAssets } from "@/lib/team";
+import { listOuts } from "@/lib/availability";
 import * as act from "@/app/actions";
 
 const SLOT_LABEL: Record<Slot, string> = { double: "D1 ×2", d1: "D2", d2: "D3", d3: "D4", d4: "D5", team: "C" };
@@ -60,6 +61,14 @@ export async function Corrections({
     .where(eq(pricePeers.seasonId, season.id));
   const tickers = new Map((await db.select({ id: people.id, ticker: people.ticker }).from(people)).map((p) => [p.id, p.ticker]));
   const people4 = drivers.filter((d) => d.personId != null);
+  // Who's racing: always about the race that's open now.
+  const open = await currentRace(db);
+  const openAssets = open ? (open.id === race.id ? assets : await teamAssets(db, open)) : [];
+  const outs = await listOuts(db, open?.id ?? null);
+  const racing = openAssets
+    .filter((a) => !a.out)
+    .map((a) => ({ key: a.kind === "driver" ? `p${a.personId}` : `c${a.id.slice(1)}`, ticker: a.ticker, kind: a.kind }))
+    .sort((a, b) => (a.kind === b.kind ? a.ticker.localeCompare(b.ticker) : a.kind === "driver" ? -1 : 1));
   const q = (extra: Record<string, string | number>) =>
     "/admin?" + new URLSearchParams({ race: String(race.id), ...Object.fromEntries(Object.entries(extra).map(([k, v]) => [k, String(v)])) }) + "#corrections";
 
@@ -297,6 +306,71 @@ export async function Corrections({
               {peerRows.length > 0 && (
                 <> This season: {peerRows.map((r) => `${tickers.get(r.personId)} ← ${tickers.get(r.peerPersonId)}`).join(", ")}.</>
               )}
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* 5. Who's racing */}
+      <div className={sub}>
+        <h3 className="mb-1 font-semibold">Not racing{open ? ` (${open.label})` : ""}</h3>
+        {!open ? (
+          <p className="text-xs text-muted">No race is open.</p>
+        ) : (
+          <>
+            <ActionForm action={act.setOutAction} className="flex flex-wrap items-end gap-2">
+              <label className="grid gap-0.5">
+                <span className="text-xs text-muted">Driver or team</span>
+                <select name="asset" className={field} defaultValue="" required>
+                  <option value="" disabled>
+                    —
+                  </option>
+                  {racing.map((a) => (
+                    <option key={a.key} value={a.key}>
+                      {a.ticker}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {!isLocked(open) && (
+                <SubmitButton
+                  name="scope"
+                  value="weekend"
+                  confirm={`Take them out of ${open.label} only? They disappear from My team for this race, and anyone who saved them gets an email to swap them out.`}
+                >
+                  Not racing this weekend
+                </SubmitButton>
+              )}
+              <SubmitButton
+                name="scope"
+                value="inactive"
+                variant="quiet"
+                confirm="Make them inactive until you turn them back on? They disappear from My team, and anyone who saved them for the open race gets an email to swap them out."
+              >
+                Inactive
+              </SubmitButton>
+            </ActionForm>
+            {outs.length > 0 && (
+              <ul className="mt-2 grid gap-1">
+                {outs.map((o) => (
+                  <li key={o.id} className="flex flex-wrap items-center gap-2">
+                    <b>{o.ticker}</b>
+                    <span className="text-xs text-muted">
+                      {o.scope === "inactive" ? "inactive until turned back on" : `not racing ${o.raceLabel}`}
+                    </span>
+                    <ActionForm action={act.clearOutAction}>
+                      <input type="hidden" name="outId" value={o.id} />
+                      <SubmitButton variant="quiet">Turn back on</SubmitButton>
+                    </ActionForm>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-1 text-xs text-muted">
+              Drivers and teams f1fantasytools drops are taken out automatically; this is for when it&apos;s slow to.
+              Anyone with them in their saved team is emailed straight away. If they don&apos;t swap them by the
+              deadline, they stay in the team and score 0. &ldquo;Not racing this weekend&rdquo; ends when the next race
+              opens.
             </p>
           </>
         )}

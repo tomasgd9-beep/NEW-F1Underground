@@ -6,6 +6,7 @@ import { logActivity } from "@/lib/league";
 import { alertCommissioners, sendDeadlineReminders, sendLockNotices } from "@/lib/notify";
 import { runJob, type RunResult } from "@/lib/sync";
 import { sendAutoRecaps } from "@/lib/recap-email";
+import { alertMissingPoints } from "@/lib/availability";
 
 export async function runScheduledJob(db: Db, actor = "job"): Promise<RunResult> {
   try {
@@ -24,6 +25,7 @@ export async function runScheduledJob(db: Db, actor = "job"): Promise<RunResult>
       ["reminders", sendDeadlineReminders],
       ["lock notices", sendLockNotices],
       ["recaps", sendAutoRecaps],
+      ["missing points", alertMissingPoints],
     ] as const) {
       try {
         await send(db);

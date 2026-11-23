@@ -155,6 +155,7 @@ export function TeamBuilder({
     const rows = assets.filter(
       (a) =>
         a.kind === tab &&
+        !a.out &&
         (!q || a.ticker.toLowerCase().includes(q) || a.name.toLowerCase().includes(q) || a.team.toLowerCase().includes(q)),
     );
     const cmp: Record<SortKey, (a: TeamAsset, b: TeamAsset) => number> = {
@@ -224,7 +225,9 @@ export function TeamBuilder({
                     <>
                       <span className="h-5 w-1 shrink-0 rounded" style={{ background: a.colour }} />
                       <b className={badIds.has(a.id) ? "text-down" : ""}>{a.ticker}</b>
-                      <span className="truncate text-muted">{a.kind === "driver" ? a.team : a.name}</span>
+                      <span className="truncate text-muted">
+                        {a.out ? <span className="font-semibold text-down">not racing</span> : a.kind === "driver" ? a.team : a.name}
+                      </span>
                       <span className="ml-auto">{fmt(a.price)}</span>
                       {!locked && (
                         <button
@@ -328,7 +331,16 @@ export function TeamBuilder({
                   Saved over budget by {fmt(price - budget)}: that&apos;s −{Math.abs(penalty)} pts this race.
                 </li>
               )}
-              {issues.length > 0 && <li>Saved team breaks a rule (see above); fix it before the deadline.</li>}
+              {issues.some((i) => i.code === "not_racing") && (
+                <li>
+                  {issues
+                    .filter((i) => i.code === "not_racing")
+                    .map((i) => name(i.assetId))
+                    .join(", ")}{" "}
+                  won&apos;t race this weekend: swap them out before the deadline, or they stay in your team and score 0.
+                </li>
+              )}
+              {issues.some((i) => i.code !== "not_racing") && <li>Saved team breaks a rule (see above); fix it before the deadline.</li>}
             </ul>
           )}
         </div>

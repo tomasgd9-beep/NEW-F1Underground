@@ -84,8 +84,9 @@ async function upsertRace(db: Db, seasonId: number, r: FftRace, withStatus: bool
       .set({
         ...common,
         ...(relabel !== existing.label ? { label: relabel } : {}),
-        // A race the commissioner cancelled stays cancelled.
+        // A race the commissioner cancelled stays cancelled; one closed by hand stays final.
         ...(existing.status === "cancelled" ? { status: "cancelled" as const } : {}),
+        ...(existing.closedByHand ? { results: "final" as const, status: "completed" as const } : {}),
         ...(existing.deadlineManual || !dl ? {} : { deadline: dl.when }),
       })
       .where(eq(races.id, existing.id))
@@ -294,8 +295,9 @@ async function fillAndFreeze(
     xp[a.id] = xpByFft && f && f in xpByFft ? xpByFft[f] : a.season;
     price[a.id] = a.price;
   }
-  const D = assets.filter((a) => a.kind === "driver").map((a) => a.id);
-  const C = assets.filter((a) => a.kind === "constructor").map((a) => a.id);
+  // Fills only use assets that are racing; a saved pick of one that isn't stays and scores 0.
+  const D = assets.filter((a) => a.kind === "driver" && !a.out).map((a) => a.id);
+  const C = assets.filter((a) => a.kind === "constructor" && !a.out).map((a) => a.id);
   const valid = new Set(assets.map((a) => a.id));
 
   const xpSource = xpByFft ? (opts.xpSource ?? "f1fantasytools expected points") : "season points (no expected points)";
